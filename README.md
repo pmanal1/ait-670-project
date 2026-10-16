@@ -9,7 +9,9 @@ Alternatively, users can upload a video of themselves performing an exercise, an
 The overall goal of Spot Me is to provide users with accessible and personalized workout guidance without requiring a personal trainer by combining personalized workout plans and video-based form feedback.
 
 **Course:** AIT-670
+
 **Team:** Paulo Manalo, Ben Kirch, Charles Obiri-Yeboah
+
 **Semester:** [Fall 2026]
 
 ## Project Structure
