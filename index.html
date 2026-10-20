@@ -33,7 +33,30 @@
 
   <main class="content">
     <section id="view-coach" class="view active">
-      <h1>Hello Coach!</h1>
+      <div class="chat-container">
+        <div class="chat-messages" id="chat-messages">
+          <div class="chat-empty-state" id="chat-empty-state">
+            <h2 class="chat-empty-title">Coach</h2>
+            <p class="chat-empty-subtitle">Ask me anything about your training.</p>
+          </div>
+        </div>
+
+        <form class="chat-input-form" id="chat-form">
+          <div class="chat-input-wrapper">
+            <textarea
+              id="chat-input"
+              class="chat-input"
+              rows="1"
+              placeholder="Message Coach..."
+              autocomplete="off"
+            ></textarea>
+            <button type="submit" class="chat-send-btn" id="chat-send-btn" aria-label="Send message">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5l0 14" /><path d="M18 13l-6 6" /><path d="M6 13l6 6" /></svg>
+            </button>
+          </div>
+          <p class="chat-disclaimer">Coach can make mistakes. Verify important information.</p>
+        </form>
+      </div>
     </section>
     <section id="view-workout" class="view">
       <h1>Hello Workout!</h1>
