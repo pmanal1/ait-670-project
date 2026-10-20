@@ -59,12 +59,25 @@
       </div>
     </section>
     <section id="view-workout" class="view">
-      <h1>Hello Workout!</h1>
+      <h1 class="workout-title">Current Workout</h1>
+      <div id="workout-list"></div>
+      <button type="button" class="workout-complete-btn" id="workout-complete-btn" disabled>
+        Complete Workout
+      </button>
     </section>
     <section id="view-profile" class="view">
       <h1>Hello Profile!</h1>
     </section>
   </main>
+
+  <div class="modal-overlay hidden" id="modal-overlay">
+    <div class="modal">
+      <button type="button" class="modal-close-btn" id="modal-close-btn" aria-label="Close modal">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-x"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M18 6l-12 12" /><path d="M6 6l12 12" /></svg>
+      </button>
+      <p class="modal-content">Hello World</p>
+    </div>
+  </div>
 
   <script src="script.js"></script>
 </body>
