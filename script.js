@@ -5,17 +5,8 @@ const chatForm = document.getElementById("chat-form");
 const chatInput = document.getElementById("chat-input");
 const chatMessages = document.getElementById("chat-messages");
 const chatEmptyState = document.getElementById("chat-empty-state");
-const chatSendBtn = document.getElementById("chat-send-btn");
 
-const OPENCODE_API_URL = "https://opencode.ai/inference/openai/v1/chat/completions";
-const OPENCODE_MODEL = "kimi-k2.6";
-
-// TODO: Fill in OPENCODE_API_KEY from your .env (OPENCODE_API_KEY=...)
-// Note: .env values can't be read directly in the browser — this needs to be
-// injected at build/serve time, or proxied through a small backend.
-const OPENCODE_API_KEY = "oc_sk_920bbea4bc6a_H3ydokC1fI12d_I2FWBPtixPGFbDeeeC";
-
-let chatHistory = [];
+const CLASSIFY_API_URL = "/api/classify";
 
 sidebarItems.forEach((item) => {
   item.addEventListener("click", (e) => {
@@ -40,42 +31,51 @@ chatForm.addEventListener("submit", (e) => {
 });
 
 function sendMessage() {
-  // TODO:
-  // 1. Read the trimmed text from chatInput
-  // 2. If empty, return early
-  // 3. Push it into chatHistory as { role: "user", content: text }
-  // 4. Render it with renderMessage("user", text)
-  // 5. Clear chatInput and reset its height
-  // 6. Call getCoachResponse() and handle the result
+  const text = chatInput.value.trim();
+  if (!text) return;
+
+  renderMessage("user", text);
+
+  chatInput.value = "";
+  chatInput.style.height = "auto";
+  chatInput.focus();
+
+  classifyMessage(text);
 }
 
 function renderMessage(role, content) {
-  // TODO:
-  // 1. Hide chatEmptyState now that there's a message
-  // 2. Create a div with class "chat-message" plus the role
-  //    ("user" or "assistant") and set its textContent to content
-  // 3. Append it to chatMessages and scroll chatMessages to the bottom
+  chatEmptyState.style.display = "none";
+
+  const message = document.createElement("div");
+  message.classList.add("chat-message", role);
+  message.textContent = content;
+  chatMessages.appendChild(message);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+  return message;
 }
 
-function showTypingIndicator() {
-  // TODO:
-  // Append an assistant message with the class "typing" saying "Coach is
-  // thinking..." and return the element so it can be removed later
+function renderClassification(label) {
+  chatEmptyState.style.display = "none";
+
+  const badge = document.createElement("div");
+  badge.classList.add("chat-classification");
+  badge.textContent = label;
+  chatMessages.appendChild(badge);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+  return badge;
 }
 
-async function getCoachResponse(historyMessages) {
-  // TODO:
-  // 1. Call showTypingIndicator() to show the waiting bubble
-  // 2. POST to OPENCODE_API_URL with:
-  //    {
-  //      "Authorization": `Bearer ${OPENCODE_API_KEY}`,
-  //      "Content-Type": "application/json"
-  //    }
-  //    and body: { model: OPENCODE_MODEL, messages: historyMessages }
-  // 3. Parse the JSON and pull the reply out of
-  //    response.choices[0].message.content
-  // 4. Remove the typing indicator
-  // 5. Push the reply into chatHistory as { role: "assistant", content: reply }
-  // 6. Render it with renderMessage("assistant", reply)
-  // 7. On failure, remove the indicator and render an error message instead
+async function classifyMessage(text) {
+  try {
+    const res = await fetch(CLASSIFY_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.label) throw new Error(data.error || "Classification failed");
+    renderClassification(data.label);
+  } catch (err) {
+    renderClassification("Unclassified");
+  }
 }

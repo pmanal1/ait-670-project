@@ -21,9 +21,15 @@ ait-670-project/
 ├── index.html      
 ├── styles.css      
 ├── script.js       
+├── server.js       # Local Node proxy: serves the app + OpenCode AI endpoints
 └── README.md
 ```
 
 ## Usage
 
-Open the html file in your browser to view the weightlifting app.
+1. Fill in your keys in `.env` (see `.env.example`).
+2. Run `node server.js` and open http://localhost:5173.
+
+Messages sent in the Coach view are classified by Jev (jev-1.13) into one
+of: Create Workout, Modify Workout, Give Workout Advice, or Analyze Form, and
+the label is shown in the chat.

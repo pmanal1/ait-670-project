@@ -178,7 +178,25 @@ body {
   padding-right: 0;
 }
 
-.chat-message.typing {
+.chat-classification {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: -16px 0 0;
+  padding: 4px 12px;
+  border: 1px solid #3f3f46;
+  border-radius: 999px;
+  font-size: 12px;
+  color: #a1a1aa;
+}
+
+.chat-classification::before {
+  content: "Message type";
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 10px;
   color: #71717a;
 }
 
