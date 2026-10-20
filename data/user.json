@@ -1,0 +1,17 @@
+{
+  "name": "Linus Torvalds",
+  "height": { "cm": 175 },
+  "weight": { "kg": 75 },
+  "experienceLevel": "Intermediate",
+  "goals": [
+    "Build muscle",
+    "Improve strength"
+  ],
+  "preferences": {
+    "units": "metric",
+    "workoutDaysPerWeek": 4,
+    "equipmentAccess": ["Barbell", "Dumbbell", "Machine", "Bodyweight"],
+    "preferredMuscleGroups": ["Chest", "Back", "Quads"],
+    "notifications": true
+  }
+}
