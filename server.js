@@ -283,6 +283,21 @@ function handleDeleteSession(res, sessionId) {
   sendJson(res, 200, { ok: true });
 }
 
+async function handleRenameSession(req, res, sessionId) {
+  const session = readSession(sessionId);
+  if (!session) {
+    return sendJson(res, 404, { error: "Session not found" });
+  }
+  const { title } = await readBody(req);
+  if (typeof title !== "string" || !title.trim()) {
+    return sendJson(res, 400, { error: "title is required" });
+  }
+  session.title = title.trim().slice(0, 60);
+  session.updatedAt = new Date().toISOString();
+  writeSession(session);
+  sendJson(res, 200, { ok: true });
+}
+
 function serveStatic(req, res, pathname) {
   const file = pathname === "/" ? "/index.html" : pathname;
   const filePath = path.join(__dirname, path.normalize(file));
@@ -303,6 +318,9 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && pathname === "/api/sessions") return await handleCreateSession(req, res);
     if (req.method === "DELETE" && !pathname.endsWith("/messages") && pathname.startsWith("/api/sessions/")) {
       return handleDeleteSession(res, pathname.split("/")[3]);
+    }
+    if (req.method === "PATCH" && !pathname.endsWith("/messages") && pathname.startsWith("/api/sessions/")) {
+      return await handleRenameSession(req, res, pathname.split("/")[3]);
     }
     if (req.method === "GET" && sessionMatch) {
       const session = readSession(sessionMatch[1]);
