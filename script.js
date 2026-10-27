@@ -422,10 +422,58 @@ function clearChatMessages() {
   chatMessages.appendChild(chatEmptyState);
 }
 
+const DOTS_ICON =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M11 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /><path d="M11 19a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /><path d="M11 5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /></svg>';
+
 const TRASH_ICON =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0" /><path d="M10 11l0 6" /><path d="M14 11l0 6" /><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></svg>';
+  '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0" /><path d="M10 11l0 6" /><path d="M14 11l0 6" /><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></svg>';
+
+function closeSessionMenu() {
+  document.querySelector(".session-menu")?.remove();
+  document.querySelector(".chat-session-menu-btn.menu-open")?.classList.remove("menu-open");
+}
+
+function openSessionMenu(anchor, sessionId) {
+  closeSessionMenu();
+  anchor.classList.add("menu-open");
+  const rect = anchor.getBoundingClientRect();
+  const menu = document.createElement("div");
+  menu.classList.add("session-menu");
+
+  const deleteItem = document.createElement("button");
+  deleteItem.type = "button";
+  deleteItem.classList.add("session-menu-item", "danger");
+  deleteItem.innerHTML = `${TRASH_ICON}<span>Delete</span>`;
+  deleteItem.addEventListener("click", () => {
+    closeSessionMenu();
+    deleteSession(sessionId);
+  });
+
+  menu.appendChild(deleteItem);
+  document.body.appendChild(menu);
+
+  const menuRect = menu.getBoundingClientRect();
+  let left = rect.right + 4;
+  if (left + menuRect.width > window.innerWidth) {
+    left = window.innerWidth - menuRect.width - 8;
+  }
+  let top = rect.top;
+  if (top + menuRect.height > window.innerHeight) {
+    top = window.innerHeight - menuRect.height - 8;
+  }
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+
+  setTimeout(() => {
+    document.addEventListener("click", closeSessionMenu, { once: true });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeSessionMenu();
+    }, { once: true });
+  });
+}
 
 function renderSessionList() {
+  closeSessionMenu();
   chatSessionList.innerHTML = "";
   sessions.forEach((session) => {
     const item = document.createElement("li");
@@ -436,18 +484,21 @@ function renderSessionList() {
     title.classList.add("chat-session-title");
     title.textContent = session.title;
 
-    const deleteBtn = document.createElement("button");
-    deleteBtn.type = "button";
-    deleteBtn.classList.add("chat-session-delete-btn");
-    deleteBtn.setAttribute("aria-label", `Delete session`);
-    deleteBtn.innerHTML = TRASH_ICON;
-    deleteBtn.addEventListener("click", (e) => {
+    const menuBtn = document.createElement("button");
+    menuBtn.type = "button";
+    menuBtn.classList.add("chat-session-menu-btn");
+    menuBtn.setAttribute("aria-label", "Session options");
+    menuBtn.setAttribute("aria-haspopup", "true");
+    menuBtn.innerHTML = DOTS_ICON;
+    menuBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      deleteSession(session.id);
+      const menu = document.querySelector(".session-menu");
+      if (menu) closeSessionMenu();
+      else openSessionMenu(menuBtn, session.id);
     });
 
     item.addEventListener("click", () => switchSession(session.id));
-    item.append(title, deleteBtn);
+    item.append(title, menuBtn);
     chatSessionList.appendChild(item);
   });
 }
