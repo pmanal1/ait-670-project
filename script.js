@@ -190,6 +190,13 @@ function updateCompleteButton() {
   workoutCompleteBtn.disabled = !allDone;
 }
 
+function activateView(view) {
+  const target = [...sidebarItems].find((item) => item.dataset.view === view);
+  if (!target) return;
+  sidebarItems.forEach((i) => i.classList.toggle("active", i === target));
+  views.forEach((v) => v.classList.toggle("active", v.id === `view-${view}`));
+}
+
 // Profile view
 
 const profileRoot = document.getElementById("profile-root");
@@ -483,6 +490,7 @@ async function switchSession(id) {
     currentSession = await res.json();
     renderSessionList();
     renderSession(currentSession);
+    activateView("coach");
   } catch {
     // keep the current view if loading fails
   }
