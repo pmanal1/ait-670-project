@@ -422,14 +422,32 @@ function clearChatMessages() {
   chatMessages.appendChild(chatEmptyState);
 }
 
+const TRASH_ICON =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0" /><path d="M10 11l0 6" /><path d="M14 11l0 6" /><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></svg>';
+
 function renderSessionList() {
   chatSessionList.innerHTML = "";
   sessions.forEach((session) => {
     const item = document.createElement("li");
     item.classList.add("chat-session-item");
     if (currentSession?.id === session.id) item.classList.add("active");
-    item.textContent = session.title;
+
+    const title = document.createElement("span");
+    title.classList.add("chat-session-title");
+    title.textContent = session.title;
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.classList.add("chat-session-delete-btn");
+    deleteBtn.setAttribute("aria-label", `Delete session`);
+    deleteBtn.innerHTML = TRASH_ICON;
+    deleteBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      deleteSession(session.id);
+    });
+
     item.addEventListener("click", () => switchSession(session.id));
+    item.append(title, deleteBtn);
     chatSessionList.appendChild(item);
   });
 }
@@ -442,6 +460,18 @@ async function loadSessions() {
     renderSessionList();
   } catch {
     // leave sidebar empty if the store is unreachable
+  }
+}
+
+async function deleteSession(id) {
+  try {
+    const res = await fetch(`${SESSIONS_API_URL}/${id}`, { method: "DELETE" });
+    if (!res.ok) throw new Error(`Failed to delete session (${res.status})`);
+    sessions = sessions.filter((session) => session.id !== id);
+    if (currentSession?.id === id) startNewSession();
+    else renderSessionList();
+  } catch {
+    // keep the list as-is if deletion fails
   }
 }
 

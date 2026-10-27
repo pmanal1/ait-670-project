@@ -274,6 +274,15 @@ async function handleAppendMessage(req, res, sessionId) {
   sendJson(res, 200, message);
 }
 
+function handleDeleteSession(res, sessionId) {
+  const session = readSession(sessionId);
+  if (!session) {
+    return sendJson(res, 404, { error: "Session not found" });
+  }
+  fs.unlinkSync(path.join(SESSIONS_DIR, `${sessionId}.json`));
+  sendJson(res, 200, { ok: true });
+}
+
 function serveStatic(req, res, pathname) {
   const file = pathname === "/" ? "/index.html" : pathname;
   const filePath = path.join(__dirname, path.normalize(file));
@@ -292,6 +301,9 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && pathname === "/api/classify") return await handleClassify(req, res);
     if (req.method === "GET" && pathname === "/api/sessions") return sendJson(res, 200, { sessions: listSessions() });
     if (req.method === "POST" && pathname === "/api/sessions") return await handleCreateSession(req, res);
+    if (req.method === "DELETE" && !pathname.endsWith("/messages") && pathname.startsWith("/api/sessions/")) {
+      return handleDeleteSession(res, pathname.split("/")[3]);
+    }
     if (req.method === "GET" && sessionMatch) {
       const session = readSession(sessionMatch[1]);
       return session ? sendJson(res, 200, session) : sendJson(res, 404, { error: "Session not found" });

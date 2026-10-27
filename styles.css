@@ -120,16 +120,48 @@ body {
 }
 
 .chat-session-item {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding: 8px 14px;
   border-radius: 8px;
   color: var(--sidebar-text);
   text-decoration: none;
   font-size: 14px;
+  cursor: pointer;
+}
+
+.chat-session-title {
+  flex: 1;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.chat-session-delete-btn {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 3px;
+  border: none;
+  border-radius: 6px;
+  background-color: transparent;
+  color: #71717a;
   cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.1s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+.chat-session-item:hover .chat-session-delete-btn,
+.chat-session-delete-btn:focus-visible {
+  opacity: 1;
+}
+
+.chat-session-delete-btn:hover {
+  background-color: var(--sidebar-hover);
+  color: #f87171;
 }
 
 .chat-session-item:hover {
