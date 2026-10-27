@@ -522,9 +522,71 @@ async function appendSessionMessage(sessionId, message) {
   if (!res.ok) throw new Error(`Failed to save message (${res.status})`);
 }
 
+const SUGGESTIONS = [
+  {
+    title: "Create Workout",
+    prompt: "Create a 4-day push/pull/legs workout plan for me",
+    icon: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 5h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2h-2" /><path d="M9 3m0 2a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v0a2 2 0 0 1 -2 2h-2a2 2 0 0 1 -2 -2z" /><path d="M12 12h4" /><path d="M14 10v4" /></svg>',
+  },
+  {
+    title: "Modify Workout",
+    prompt: "Swap barbell squats for goblet squats in my workout",
+    icon: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" /><path d="M13.5 6.5l4 4" /></svg>',
+  },
+  {
+    title: "Give Workout Advice",
+    prompt: "How many sets per week should I train each muscle group?",
+    icon: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M19 8.71l-5.333 -2.888a3 3 0 0 0 -3.334 0l-5.333 2.888a3 3 0 0 0 -1.555 2.63v5.959a3 3 0 0 0 1.556 2.628l5.332 2.888a3 3 0 0 0 3.334 0l5.333 -2.888a3 3 0 0 0 1.556 -2.63v-5.956a3 3 0 0 0 -1.556 -2.631" /><path d="M12 3v18" /></svg>',
+  },
+  {
+    title: "Analyze Form",
+    prompt: "Here is a video of my squat. What should I fix in my form?",
+    icon: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M15 10l4.553 -2.276a1 1 0 0 1 1.447 .894v6.764a1 1 0 0 1 -1.447 .894l-4.553 -2.276v-4z" /><path d="M3 6m0 2a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v8a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2z" /></svg>',
+  },
+];
+
+function createSuggestionGrid() {
+  const grid = document.createElement("div");
+  grid.classList.add("chat-suggestion-grid");
+  SUGGESTIONS.forEach(({ title, prompt, icon }) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.classList.add("chat-suggestion");
+    button.dataset.prompt = prompt;
+
+    const iconSpan = document.createElement("span");
+    iconSpan.classList.add("chat-suggestion-icon");
+    iconSpan.innerHTML = icon;
+
+    const titleSpan = document.createElement("span");
+    titleSpan.classList.add("chat-suggestion-title");
+    titleSpan.textContent = title;
+
+    const exampleSpan = document.createElement("span");
+    exampleSpan.classList.add("chat-suggestion-example");
+    exampleSpan.textContent = `"${prompt}"`;
+
+    button.append(iconSpan, titleSpan, exampleSpan);
+    grid.appendChild(button);
+  });
+  grid.addEventListener("click", (e) => {
+    const button = e.target.closest(".chat-suggestion");
+    if (!button) return;
+    chatInput.value = button.dataset.prompt;
+    sendMessage();
+  });
+  return grid;
+}
+
+document.getElementById("chat-suggestion-slot").appendChild(createSuggestionGrid());
+
 function sendMessage() {
   const text = chatInput.value.trim();
   if (!text) return;
+
+  chatMessages.querySelectorAll(".chat-suggestion-grid").forEach((grid) => {
+    if (grid.parentElement !== chatEmptyState) grid.remove();
+  });
 
   renderMessage("user", text);
 
@@ -588,6 +650,8 @@ async function classifyMessage(text) {
         "That doesn't look like a relevant message type. I can help you create a workout, modify a workout, give workout advice, or analyze exercise form. Try asking about one of those.";
       renderMessage("assistant", reply);
       await save({ role: "assistant", content: reply });
+      chatMessages.appendChild(createSuggestionGrid());
+      chatMessages.scrollTop = chatMessages.scrollHeight;
       return;
     }
     if (!data.label) throw new Error("Classification failed");
