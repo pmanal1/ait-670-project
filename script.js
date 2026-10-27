@@ -536,7 +536,7 @@ const SUGGESTIONS = [
   {
     title: "Give Workout Advice",
     prompt: "How many sets per week should I train each muscle group?",
-    icon: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M19 8.71l-5.333 -2.888a3 3 0 0 0 -3.334 0l-5.333 2.888a3 3 0 0 0 -1.555 2.63v5.959a3 3 0 0 0 1.556 2.628l5.332 2.888a3 3 0 0 0 3.334 0l5.333 -2.888a3 3 0 0 0 1.556 -2.63v-5.956a3 3 0 0 0 -1.556 -2.631" /><path d="M12 3v18" /></svg>',
+    icon: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 10h10" /><path d="M9 14h5" /><path d="M12.4 3a5.34 5.34 0 0 1 4.906 3.239a5.333 5.333 0 0 1 -1.195 10.6a4.26 4.26 0 0 1 -5.28 1.863l-3.831 2.298v-3.134a2.668 2.668 0 0 1 -1.795 -3.773a4.8 4.8 0 0 1 2.908 -8.933a5.33 5.33 0 0 1 4.287 -2.16" /></svg>',
   },
   {
     title: "Analyze Form",
