@@ -457,7 +457,7 @@ function openSessionMenu(anchor, sessionId) {
   if (left + menuRect.width > window.innerWidth) {
     left = window.innerWidth - menuRect.width - 8;
   }
-  let top = rect.top;
+  let top = rect.top + (rect.height - menuRect.height) / 2;
   if (top + menuRect.height > window.innerHeight) {
     top = window.innerHeight - menuRect.height - 8;
   }
