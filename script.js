@@ -429,10 +429,70 @@ function clearChatMessages() {
   chatMessages.appendChild(chatEmptyState);
 }
 
+const DOTS_ICON =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M11 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /><path d="M11 19a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /><path d="M11 5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /></svg>';
+
 const TRASH_ICON =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0" /><path d="M10 11l0 6" /><path d="M14 11l0 6" /><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></svg>';
+  '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0" /><path d="M10 11l0 6" /><path d="M14 11l0 6" /><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></svg>';
+
+const PENCIL_ICON =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" /><path d="M13.5 6.5l4 4" /></svg>';
+
+function closeSessionMenu() {
+  document.querySelector(".session-menu")?.remove();
+  document.querySelector(".chat-session-menu-btn.menu-open")?.classList.remove("menu-open");
+}
+
+function openSessionMenu(anchor, session, item) {
+  closeSessionMenu();
+  anchor.classList.add("menu-open");
+  const rect = anchor.getBoundingClientRect();
+  const menu = document.createElement("div");
+  menu.classList.add("session-menu");
+
+  const renameItem = document.createElement("button");
+  renameItem.type = "button";
+  renameItem.classList.add("session-menu-item");
+  renameItem.innerHTML = `${PENCIL_ICON}<span>Rename</span>`;
+  renameItem.addEventListener("click", () => {
+    closeSessionMenu();
+    startRename(session, item);
+  });
+
+  const deleteItem = document.createElement("button");
+  deleteItem.type = "button";
+  deleteItem.classList.add("session-menu-item", "danger");
+  deleteItem.innerHTML = `${TRASH_ICON}<span>Delete</span>`;
+  deleteItem.addEventListener("click", () => {
+    closeSessionMenu();
+    deleteSession(sessionId);
+  });
+
+  menu.append(renameItem, deleteItem);
+  document.body.appendChild(menu);
+
+  const menuRect = menu.getBoundingClientRect();
+  let left = rect.right + 4;
+  if (left + menuRect.width > window.innerWidth) {
+    left = window.innerWidth - menuRect.width - 8;
+  }
+  let top = rect.top + (rect.height - menuRect.height) / 2;
+  if (top + menuRect.height > window.innerHeight) {
+    top = window.innerHeight - menuRect.height - 8;
+  }
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+
+  setTimeout(() => {
+    document.addEventListener("click", closeSessionMenu, { once: true });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeSessionMenu();
+    }, { once: true });
+  });
+}
 
 function renderSessionList() {
+  closeSessionMenu();
   chatSessionList.innerHTML = "";
   sessions.forEach((session) => {
     const item = document.createElement("li");
@@ -443,18 +503,21 @@ function renderSessionList() {
     title.classList.add("chat-session-title");
     title.textContent = session.title;
 
-    const deleteBtn = document.createElement("button");
-    deleteBtn.type = "button";
-    deleteBtn.classList.add("chat-session-delete-btn");
-    deleteBtn.setAttribute("aria-label", `Delete session`);
-    deleteBtn.innerHTML = TRASH_ICON;
-    deleteBtn.addEventListener("click", (e) => {
+    const menuBtn = document.createElement("button");
+    menuBtn.type = "button";
+    menuBtn.classList.add("chat-session-menu-btn");
+    menuBtn.setAttribute("aria-label", "Session options");
+    menuBtn.setAttribute("aria-haspopup", "true");
+    menuBtn.innerHTML = DOTS_ICON;
+    menuBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      deleteSession(session.id);
+      const menu = document.querySelector(".session-menu");
+      if (menu) closeSessionMenu();
+      else openSessionMenu(menuBtn, session, item);
     });
 
     item.addEventListener("click", () => switchSession(session.id));
-    item.append(title, deleteBtn);
+    item.append(title, menuBtn);
     chatSessionList.appendChild(item);
   });
 }
@@ -480,6 +543,47 @@ async function deleteSession(id) {
   } catch {
     // keep the list as-is if deletion fails
   }
+}
+
+async function renameSession(id, title) {
+  try {
+    const res = await fetch(`${SESSIONS_API_URL}/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title }),
+    });
+    if (!res.ok) throw new Error(`Failed to rename session (${res.status})`);
+    sessions = sessions.map((session) => (session.id === id ? { ...session, title } : session));
+    renderSessionList();
+  } catch {
+    // keep the old title if renaming fails
+  }
+}
+
+function startRename(session, item) {
+  const titleEl = item.querySelector(".chat-session-title");
+  const input = document.createElement("input");
+  input.type = "text";
+  input.classList.add("chat-session-rename-input");
+  input.value = session.title;
+  input.maxLength = 60;
+  item.replaceChild(input, titleEl);
+  input.focus();
+  input.select();
+  input.addEventListener("click", (e) => e.stopPropagation());
+  input.addEventListener("keydown", (e) => {
+    e.stopPropagation();
+    if (e.key === "Enter") input.blur();
+    if (e.key === "Escape") {
+      input.value = session.title;
+      input.blur();
+    }
+  });
+  input.addEventListener("blur", () => {
+    const newTitle = input.value.trim();
+    input.replaceWith(titleEl);
+    if (newTitle && newTitle !== session.title) renameSession(session.id, newTitle);
+  });
 }
 
 async function switchSession(id) {
