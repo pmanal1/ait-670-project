@@ -465,7 +465,7 @@ function openSessionMenu(anchor, session, item) {
   deleteItem.innerHTML = `${TRASH_ICON}<span>Delete</span>`;
   deleteItem.addEventListener("click", () => {
     closeSessionMenu();
-    deleteSession(sessionId);
+    deleteSession(session.id);
   });
 
   menu.append(renameItem, deleteItem);
