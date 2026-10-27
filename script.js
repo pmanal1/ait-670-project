@@ -5,17 +5,29 @@ const chatForm = document.getElementById("chat-form");
 const chatInput = document.getElementById("chat-input");
 const chatMessages = document.getElementById("chat-messages");
 const chatEmptyState = document.getElementById("chat-empty-state");
+const chatSessionList = document.getElementById("chat-session-list");
+const newSessionBtn = document.getElementById("new-session-btn");
 
 const CLASSIFY_API_URL = "/api/classify";
+const SESSIONS_API_URL = "/api/sessions";
+
+let currentSession = null;
+let sessions = [];
 
 loadWorkout();
 loadProfile();
+loadSessions();
 
 sidebarItems.forEach((item) => {
   item.addEventListener("click", (e) => {
     e.preventDefault();
 
     const view = item.dataset.view;
+
+    if (view === "coach" && item.classList.contains("active")) {
+      startNewSession();
+      return;
+    }
 
     sidebarItems.forEach((i) => i.classList.toggle("active", i === item));
     views.forEach((v) => v.classList.toggle("active", v.id === `view-${view}`));
@@ -202,7 +214,7 @@ function renderProfile(user) {
   profileRoot.innerHTML = "";
 
   const initials = user.name
-    .split(/s+/)
+    .split(/\s+/)
     .map((part) => part[0])
     .slice(0, 2)
     .join("")
@@ -395,6 +407,121 @@ chatForm.addEventListener("submit", (e) => {
   sendMessage();
 });
 
+newSessionBtn.addEventListener("click", startNewSession);
+
+function startNewSession() {
+  currentSession = null;
+  renderSessionList();
+  clearChatMessages();
+  chatInput.focus();
+}
+
+function clearChatMessages() {
+  chatMessages.innerHTML = "";
+  chatEmptyState.style.display = "";
+  chatMessages.appendChild(chatEmptyState);
+}
+
+const TRASH_ICON =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0" /><path d="M10 11l0 6" /><path d="M14 11l0 6" /><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></svg>';
+
+function renderSessionList() {
+  chatSessionList.innerHTML = "";
+  sessions.forEach((session) => {
+    const item = document.createElement("li");
+    item.classList.add("chat-session-item");
+    if (currentSession?.id === session.id) item.classList.add("active");
+
+    const title = document.createElement("span");
+    title.classList.add("chat-session-title");
+    title.textContent = session.title;
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.classList.add("chat-session-delete-btn");
+    deleteBtn.setAttribute("aria-label", `Delete session`);
+    deleteBtn.innerHTML = TRASH_ICON;
+    deleteBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      deleteSession(session.id);
+    });
+
+    item.addEventListener("click", () => switchSession(session.id));
+    item.append(title, deleteBtn);
+    chatSessionList.appendChild(item);
+  });
+}
+
+async function loadSessions() {
+  try {
+    const res = await fetch(SESSIONS_API_URL);
+    if (!res.ok) return;
+    sessions = (await res.json()).sessions || [];
+    renderSessionList();
+  } catch {
+    // leave sidebar empty if the store is unreachable
+  }
+}
+
+async function deleteSession(id) {
+  try {
+    const res = await fetch(`${SESSIONS_API_URL}/${id}`, { method: "DELETE" });
+    if (!res.ok) throw new Error(`Failed to delete session (${res.status})`);
+    sessions = sessions.filter((session) => session.id !== id);
+    if (currentSession?.id === id) startNewSession();
+    else renderSessionList();
+  } catch {
+    // keep the list as-is if deletion fails
+  }
+}
+
+async function switchSession(id) {
+  if (currentSession?.id === id) return;
+  try {
+    const res = await fetch(`${SESSIONS_API_URL}/${id}`);
+    if (!res.ok) throw new Error(`Failed to load session (${res.status})`);
+    currentSession = await res.json();
+    renderSessionList();
+    renderSession(currentSession);
+  } catch {
+    // keep the current view if loading fails
+  }
+}
+
+function renderSession(session) {
+  chatMessages.innerHTML = "";
+  if (session.messages.length) {
+    chatEmptyState.style.display = "none";
+  } else {
+    chatEmptyState.style.display = "";
+    chatMessages.appendChild(chatEmptyState);
+  }
+  session.messages.forEach((message) => {
+    if (message.type === "classification") renderClassification(message.content);
+    else renderMessage(message.role, message.content);
+  });
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+async function createSession(title) {
+  const res = await fetch(SESSIONS_API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title: title.slice(0, 60) }),
+  });
+  if (!res.ok) throw new Error(`Failed to create session (${res.status})`);
+  return res.json();
+}
+
+async function appendSessionMessage(sessionId, message) {
+  const res = await fetch(`${SESSIONS_API_URL}/${sessionId}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(message),
+  });
+  if (!res.ok) throw new Error(`Failed to save message (${res.status})`);
+}
+
 function sendMessage() {
   const text = chatInput.value.trim();
   if (!text) return;
@@ -405,7 +532,20 @@ function sendMessage() {
   chatInput.style.height = "auto";
   chatInput.focus();
 
-  classifyMessage(text);
+  (async () => {
+    if (!currentSession) {
+      try {
+        currentSession = await createSession(text);
+        await loadSessions();
+      } catch {
+        currentSession = null;
+      }
+    }
+    if (currentSession) {
+      appendSessionMessage(currentSession.id, { role: "user", content: text }).catch(() => {});
+    }
+    await classifyMessage(text);
+  })();
 }
 
 function renderMessage(role, content) {
@@ -431,6 +571,10 @@ function renderClassification(label) {
 }
 
 async function classifyMessage(text) {
+  const save = (message) =>
+    currentSession
+      ? appendSessionMessage(currentSession.id, message).catch(() => {})
+      : Promise.resolve();
   try {
     const res = await fetch(CLASSIFY_API_URL, {
       method: "POST",
@@ -440,15 +584,17 @@ async function classifyMessage(text) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Classification failed");
     if (data.relevant === false) {
-      renderMessage(
-        "assistant",
-        "That doesn't look like a relevant message type. I can help you create a workout, modify a workout, give workout advice, or analyze exercise form. Try asking about one of those."
-      );
+      const reply =
+        "That doesn't look like a relevant message type. I can help you create a workout, modify a workout, give workout advice, or analyze exercise form. Try asking about one of those.";
+      renderMessage("assistant", reply);
+      await save({ role: "assistant", content: reply });
       return;
     }
     if (!data.label) throw new Error("Classification failed");
     renderClassification(data.label);
+    await save({ type: "classification", content: data.label });
   } catch (err) {
     renderClassification("Unclassified");
+    await save({ type: "classification", content: "Unclassified" });
   }
 }

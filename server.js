@@ -16,6 +16,50 @@ try {
 const OPENCODE_API_KEY = env.OPENCODE_API_KEY;
 const PORT = process.env.PORT || 5173;
 
+// Chat sessions: one JSON file per session in /sessions, filename = id.
+const SESSIONS_DIR = path.join(__dirname, "sessions");
+fs.mkdirSync(SESSIONS_DIR, { recursive: true });
+
+function createSessionId() {
+  let id = String(Date.now());
+  while (fs.existsSync(path.join(SESSIONS_DIR, `${id}.json`))) {
+    id = String(Number(id) + 1);
+  }
+  return id;
+}
+
+function readSession(id) {
+  if (!/^\d+$/.test(id)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(path.join(SESSIONS_DIR, `${id}.json`), "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function writeSession(session) {
+  fs.writeFileSync(
+    path.join(SESSIONS_DIR, `${session.id}.json`),
+    JSON.stringify(session, null, 2),
+  );
+}
+
+function listSessions() {
+  return fs
+    .readdirSync(SESSIONS_DIR)
+    .filter((f) => f.endsWith(".json"))
+    .map((f) => readSession(f.slice(0, -5)))
+    .filter(Boolean)
+    .sort((a, b) => Number(b.id) - Number(a.id))
+    .map((session) => ({
+      id: session.id,
+      title: session.title || "Untitled",
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt,
+      messageCount: session.messages.length,
+    }));
+}
+
 const CLASSIFY_URL = "https://opencode.ai/zen/v1/systemone";
 const CLASSIFY_MODEL = "jev-1.13";
 const CLASSIFY_MODEL_FALLBACK = "jev-1.13-free";
@@ -194,6 +238,51 @@ async function callSystemOne(model, state, questions, answerKeys) {
   }
 }
 
+// Chat session endpoints
+async function handleCreateSession(req, res) {
+  const { title } = await readBody(req);
+  const now = new Date().toISOString();
+  const session = {
+    id: createSessionId(),
+    title: typeof title === "string" && title.trim() ? title.trim().slice(0, 60) : "Untitled",
+    createdAt: now,
+    updatedAt: now,
+    messages: [],
+  };
+  writeSession(session);
+  sendJson(res, 201, session);
+}
+
+async function handleAppendMessage(req, res, sessionId) {
+  const session = readSession(sessionId);
+  if (!session) {
+    return sendJson(res, 404, { error: "Session not found" });
+  }
+  const { role, type, content } = await readBody(req);
+  if (typeof content !== "string" || !content.trim()) {
+    return sendJson(res, 400, { error: "content is required" });
+  }
+  if (role && !["user", "assistant"].includes(role)) {
+    return sendJson(res, 400, { error: "Invalid role" });
+  }
+  const message = { content: content.trim(), createdAt: new Date().toISOString() };
+  if (role) message.role = role;
+  if (type) message.type = type;
+  session.messages.push(message);
+  session.updatedAt = message.createdAt;
+  writeSession(session);
+  sendJson(res, 200, message);
+}
+
+function handleDeleteSession(res, sessionId) {
+  const session = readSession(sessionId);
+  if (!session) {
+    return sendJson(res, 404, { error: "Session not found" });
+  }
+  fs.unlinkSync(path.join(SESSIONS_DIR, `${sessionId}.json`));
+  sendJson(res, 200, { ok: true });
+}
+
 function serveStatic(req, res, pathname) {
   const file = pathname === "/" ? "/index.html" : pathname;
   const filePath = path.join(__dirname, path.normalize(file));
@@ -207,8 +296,19 @@ function serveStatic(req, res, pathname) {
 
 const server = http.createServer(async (req, res) => {
   const pathname = new URL(req.url, `http://${req.headers.host}`).pathname;
+  const sessionMatch = pathname.match(/^\/api\/sessions\/(\d+)\/messages$/) || pathname.match(/^\/api\/sessions\/(\d+)$/);
   try {
     if (req.method === "POST" && pathname === "/api/classify") return await handleClassify(req, res);
+    if (req.method === "GET" && pathname === "/api/sessions") return sendJson(res, 200, { sessions: listSessions() });
+    if (req.method === "POST" && pathname === "/api/sessions") return await handleCreateSession(req, res);
+    if (req.method === "DELETE" && !pathname.endsWith("/messages") && pathname.startsWith("/api/sessions/")) {
+      return handleDeleteSession(res, pathname.split("/")[3]);
+    }
+    if (req.method === "GET" && sessionMatch) {
+      const session = readSession(sessionMatch[1]);
+      return session ? sendJson(res, 200, session) : sendJson(res, 404, { error: "Session not found" });
+    }
+    if (req.method === "POST" && sessionMatch && pathname.endsWith("/messages")) return await handleAppendMessage(req, res, sessionMatch[1]);
     if (req.method === "GET") return serveStatic(req, res, pathname);
     res.writeHead(405, { "Content-Type": "text/plain" });
     res.end("Method not allowed");
