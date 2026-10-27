@@ -1,0 +1,810 @@
+[
+  {
+    "id": "2-Arm Dumbbell Curls",
+    "exerciseType": "Dumbbell",
+    "sets": [],
+    "custom": false,
+    "name": "2-Arm Dumbbell Curls",
+    "muscleGroup": "Biceps"
+  },
+  {
+    "id": "Assisted Dips",
+    "custom": false,
+    "muscleGroup": "Tricep",
+    "sets": [],
+    "name": "Assisted Dips",
+    "exerciseType": "Machine Assistance"
+  },
+  {
+    "id": "Assisted Pullups",
+    "muscleGroup": "Back",
+    "name": "Assisted Pullups",
+    "custom": false,
+    "sets": [],
+    "exerciseType": "Machine Assistance"
+  },
+  {
+    "id": "Barbell Bent Over Row",
+    "sets": [],
+    "exerciseType": "Barbell",
+    "name": "Barbell Bent Over Row",
+    "muscleGroup": "Back",
+    "custom": false
+  },
+  {
+    "id": "Barbell Bent Over Shrug",
+    "muscleGroup": "Traps",
+    "name": "Barbell Bent Over Shrug",
+    "exerciseType": "Barbell",
+    "custom": false,
+    "sets": []
+  },
+  {
+    "id": "Barbell Curl",
+    "custom": false,
+    "sets": [],
+    "exerciseType": "Barbell",
+    "muscleGroup": "Biceps",
+    "name": "Barbell Curl"
+  },
+  {
+    "id": "Barbell Facepull",
+    "name": "Barbell Facepull",
+    "muscleGroup": "Shoulder",
+    "exerciseType": "Barbell",
+    "sets": [],
+    "custom": false
+  },
+  {
+    "id": "Barbell Front Raise",
+    "exerciseType": "Barbell",
+    "sets": [],
+    "custom": false,
+    "name": "Barbell Front Raise",
+    "muscleGroup": "Shoulder"
+  },
+  {
+    "id": "Barbell Good Mornings",
+    "exerciseType": "Barbell",
+    "custom": false,
+    "sets": [],
+    "name": "Barbell Good Mornings",
+    "muscleGroup": "Hamstrings"
+  },
+  {
+    "id": "Barbell Hip Thrust",
+    "muscleGroup": "Glutes",
+    "sets": [],
+    "custom": false,
+    "name": "Barbell Hip Thrust",
+    "exerciseType": "Barbell"
+  },
+  {
+    "id": "Barbell Lunges",
+    "exerciseType": "Barbell",
+    "sets": [],
+    "custom": false,
+    "muscleGroup": "Glutes",
+    "name": "Barbell Lunges"
+  },
+  {
+    "id": "Barbell Overhead Extension",
+    "custom": false,
+    "exerciseType": "Barbell",
+    "name": "Barbell Overhead Extension",
+    "muscleGroup": "Tricep",
+    "sets": []
+  },
+  {
+    "id": "Barbell Reverse Lunges",
+    "sets": [],
+    "exerciseType": "Barbell",
+    "muscleGroup": "Glutes",
+    "custom": false,
+    "name": "Barbell Reverse Lunges"
+  },
+  {
+    "id": "Barbell Shoulder Press",
+    "name": "Barbell Shoulder Press",
+    "muscleGroup": "Shoulder",
+    "custom": false,
+    "exerciseType": "Barbell",
+    "sets": []
+  },
+  {
+    "id": "Barbell Shrug",
+    "muscleGroup": "Traps",
+    "sets": [],
+    "custom": false,
+    "exerciseType": "Barbell",
+    "name": "Barbell Shrug"
+  },
+  {
+    "id": "Barbell Skullcrushers",
+    "sets": [],
+    "muscleGroup": "Tricep",
+    "exerciseType": "Barbell",
+    "name": "Barbell Skullcrushers",
+    "custom": false
+  },
+  {
+    "id": "Barbell Split Squat",
+    "muscleGroup": "Quads",
+    "sets": [],
+    "custom": false,
+    "exerciseType": "Barbell",
+    "name": "Barbell Split Squat"
+  },
+  {
+    "id": "Barbell Squat",
+    "muscleGroup": "Quads",
+    "name": "Barbell Squat",
+    "custom": false,
+    "sets": [],
+    "exerciseType": "Barbell"
+  },
+  {
+    "id": "Barbell Stiff Legged Deadlift",
+    "muscleGroup": "Hamstrings",
+    "sets": [],
+    "custom": false,
+    "exerciseType": "Barbell",
+    "name": "Barbell Stiff Legged Deadlift"
+  },
+  {
+    "id": "Barbell Upright Row",
+    "muscleGroup": "Shoulder",
+    "sets": [],
+    "custom": false,
+    "exerciseType": "Barbell",
+    "name": "Barbell Upright Row"
+  },
+  {
+    "id": "Barbell Wrist Curl",
+    "exerciseType": "Barbell",
+    "custom": false,
+    "muscleGroup": "Forearms",
+    "sets": [],
+    "name": "Barbell Wrist Curl"
+  },
+  {
+    "id": "Bodyweight Back Raises",
+    "name": "Bodyweight Back Raises",
+    "custom": false,
+    "exerciseType": "Bodyweight",
+    "muscleGroup": "Hamstrings",
+    "sets": []
+  },
+  {
+    "id": "Bodyweight Lunges",
+    "exerciseType": "Bodyweight",
+    "custom": false,
+    "sets": [],
+    "muscleGroup": "Glutes",
+    "name": "Bodyweight Lunges"
+  },
+  {
+    "id": "Cable Bent Over Shrug",
+    "name": "Cable Bent Over Shrug",
+    "sets": [],
+    "exerciseType": "Cable",
+    "muscleGroup": "Traps",
+    "custom": false
+  },
+  {
+    "id": "Cable Facepull (Rope)",
+    "muscleGroup": "Shoulder",
+    "exerciseType": "Cable",
+    "name": "Cable Facepull (Rope)",
+    "custom": false,
+    "sets": []
+  },
+  {
+    "id": "Cable Front Raise",
+    "custom": false,
+    "sets": [],
+    "exerciseType": "Cable",
+    "muscleGroup": "Shoulder",
+    "name": "Cable Front Raise"
+  },
+  {
+    "id": "Cable Lateral Raise",
+    "muscleGroup": "Shoulder",
+    "custom": false,
+    "exerciseType": "Cable",
+    "sets": [],
+    "name": "Cable Lateral Raise"
+  },
+  {
+    "id": "Cable Overhead Extension",
+    "custom": false,
+    "exerciseType": "Cable",
+    "sets": [],
+    "muscleGroup": "Tricep",
+    "name": "Cable Overhead Extension"
+  },
+  {
+    "id": "Cable Rope Crunch",
+    "muscleGroup": "Abs",
+    "sets": [],
+    "custom": false,
+    "name": "Cable Rope Crunch",
+    "exerciseType": "Cable"
+  },
+  {
+    "id": "Cable Shrug",
+    "custom": false,
+    "muscleGroup": "Traps",
+    "name": "Cable Shrug",
+    "exerciseType": "Cable",
+    "sets": []
+  },
+  {
+    "id": "Cable Tricep Pushdowns (Bar)",
+    "muscleGroup": "Tricep",
+    "sets": [],
+    "exerciseType": "Cable",
+    "name": "Cable Tricep Pushdowns (Bar)",
+    "custom": false
+  },
+  {
+    "id": "Cable Tricep Pushdowns (Rope)",
+    "sets": [],
+    "exerciseType": "Cable",
+    "custom": false,
+    "muscleGroup": "Tricep",
+    "name": "Cable Tricep Pushdowns (Rope)"
+  },
+  {
+    "id": "Cable Tricep Pushdowns (Single-Arm)",
+    "muscleGroup": "Tricep",
+    "sets": [],
+    "custom": false,
+    "exerciseType": "Cable",
+    "name": "Cable Tricep Pushdowns (Single-Arm)"
+  },
+  {
+    "id": "Cable Upright Row",
+    "custom": false,
+    "name": "Cable Upright Row",
+    "exerciseType": "Cable",
+    "muscleGroup": "Shoulder",
+    "sets": []
+  },
+  {
+    "id": "Cable Wrist Curl",
+    "custom": false,
+    "name": "Cable Wrist Curl",
+    "exerciseType": "Cable",
+    "muscleGroup": "Forearms",
+    "sets": []
+  },
+  {
+    "id": "Calf Machine",
+    "name": "Calf Machine",
+    "muscleGroup": "Calves",
+    "sets": [],
+    "custom": false,
+    "exerciseType": "Machine"
+  },
+  {
+    "id": "Chest Supported Row",
+    "muscleGroup": "Back",
+    "sets": [],
+    "name": "Chest Supported Row",
+    "custom": false,
+    "exerciseType": "Machine"
+  },
+  {
+    "id": "Cross Grip Front Squat",
+    "muscleGroup": "Quads",
+    "exerciseType": "Barbell",
+    "name": "Cross Grip Front Squat",
+    "custom": false,
+    "sets": []
+  },
+  {
+    "id": "Deadlift",
+    "muscleGroup": "Glutes",
+    "sets": [],
+    "exerciseType": "Barbell",
+    "custom": false,
+    "name": "Deadlift"
+  },
+  {
+    "id": "Dips",
+    "exerciseType": "Bodyweight",
+    "name": "Dips",
+    "custom": false,
+    "muscleGroup": "Tricep",
+    "sets": []
+  },
+  {
+    "id": "Dumbbell Bent Over Shrug",
+    "exerciseType": "Dumbbell",
+    "sets": [],
+    "custom": false,
+    "name": "Dumbbell Bent Over Shrug",
+    "muscleGroup": "Traps"
+  },
+  {
+    "id": "Dumbbell Facepull",
+    "muscleGroup": "Shoulder",
+    "name": "Dumbbell Facepull",
+    "sets": [],
+    "custom": false,
+    "exerciseType": "Dumbbell"
+  },
+  {
+    "id": "Dumbbell Flye",
+    "sets": [],
+    "exerciseType": "Dumbbell",
+    "muscleGroup": "Chest",
+    "custom": false,
+    "name": "Dumbbell Flye"
+  },
+  {
+    "id": "Dumbbell Front Raises",
+    "muscleGroup": "Shoulder",
+    "sets": [],
+    "name": "Dumbbell Front Raises",
+    "custom": false,
+    "exerciseType": "Dumbbell"
+  },
+  {
+    "id": "Dumbbell Lateral Raises",
+    "sets": [],
+    "exerciseType": "Dumbbell",
+    "custom": false,
+    "name": "Dumbbell Lateral Raises",
+    "muscleGroup": "Shoulder"
+  },
+  {
+    "id": "Dumbbell Lunges",
+    "custom": false,
+    "sets": [],
+    "muscleGroup": "Glutes",
+    "exerciseType": "Dumbbell",
+    "name": "Dumbbell Lunges"
+  },
+  {
+    "id": "Dumbbell Overhead Extension",
+    "custom": false,
+    "name": "Dumbbell Overhead Extension",
+    "exerciseType": "Dumbbell",
+    "muscleGroup": "Tricep",
+    "sets": []
+  },
+  {
+    "id": "Dumbbell Preacher Curl",
+    "sets": [],
+    "muscleGroup": "Biceps",
+    "exerciseType": "Dumbbell",
+    "custom": false,
+    "name": "Dumbbell Preacher Curl"
+  },
+  {
+    "id": "Dumbbell Reverse Lunges",
+    "exerciseType": "Dumbbell",
+    "name": "Dumbbell Reverse Lunges",
+    "custom": false,
+    "muscleGroup": "Glutes",
+    "sets": []
+  },
+  {
+    "id": "Dumbbell Row (2-Arm)",
+    "custom": false,
+    "name": "Dumbbell Row (2-Arm)",
+    "exerciseType": "Dumbbell",
+    "sets": [],
+    "muscleGroup": "Back"
+  },
+  {
+    "id": "Dumbbell Row (2-Arm, Incline)",
+    "custom": false,
+    "name": "Dumbbell Row (2-Arm, Incline)",
+    "muscleGroup": "Back",
+    "sets": [],
+    "exerciseType": "Dumbbell"
+  },
+  {
+    "id": "Dumbbell Row (Single-Arm, Supported)",
+    "muscleGroup": "Back",
+    "exerciseType": "Dumbbell",
+    "sets": [],
+    "name": "Dumbbell Row (Single-Arm, Supported)",
+    "custom": false
+  },
+  {
+    "id": "Dumbbell Shoulder Press",
+    "muscleGroup": "Shoulder",
+    "name": "Dumbbell Shoulder Press",
+    "custom": false,
+    "exerciseType": "Dumbbell",
+    "sets": []
+  },
+  {
+    "id": "Dumbbell Shrug",
+    "name": "Dumbbell Shrug",
+    "exerciseType": "Dumbbell",
+    "custom": false,
+    "sets": [],
+    "muscleGroup": "Traps"
+  },
+  {
+    "id": "Dumbbell Skullcrushers",
+    "sets": [],
+    "exerciseType": "Dumbbell",
+    "muscleGroup": "Tricep",
+    "name": "Dumbbell Skullcrushers",
+    "custom": false
+  },
+  {
+    "id": "Dumbbell Stiff Legged Deadlift",
+    "muscleGroup": "Hamstrings",
+    "sets": [],
+    "custom": false,
+    "name": "Dumbbell Stiff Legged Deadlift",
+    "exerciseType": "Dumbbell"
+  },
+  {
+    "id": "Dumbbell Upright Row",
+    "exerciseType": "Dumbbell",
+    "custom": false,
+    "name": "Dumbbell Upright Row",
+    "muscleGroup": "Shoulder",
+    "sets": []
+  },
+  {
+    "id": "Dumbbell Wrist Curl",
+    "custom": false,
+    "muscleGroup": "Forearms",
+    "exerciseType": "Dumbbell",
+    "name": "Dumbbell Wrist Curl",
+    "sets": []
+  },
+  {
+    "id": "EZ-Bar Cable Curl",
+    "exerciseType": "Cable",
+    "custom": false,
+    "sets": [],
+    "muscleGroup": "Biceps",
+    "name": "EZ-Bar Cable Curl"
+  },
+  {
+    "id": "EZ-Bar Curl",
+    "custom": false,
+    "name": "EZ-Bar Curl",
+    "exerciseType": "Barbell",
+    "muscleGroup": "Biceps",
+    "sets": []
+  },
+  {
+    "id": "EZ-Bar Front Raise",
+    "exerciseType": "Barbell",
+    "custom": false,
+    "sets": [],
+    "muscleGroup": "Shoulder",
+    "name": "EZ-Bar Front Raise"
+  },
+  {
+    "id": "EZ-Bar Overhead Extension",
+    "name": "EZ-Bar Overhead Extension",
+    "custom": false,
+    "muscleGroup": "Tricep",
+    "exerciseType": "Barbell",
+    "sets": []
+  },
+  {
+    "id": "Flat Barbell Bench Press",
+    "name": "Flat Barbell Bench Press",
+    "custom": false,
+    "exerciseType": "Barbell",
+    "muscleGroup": "Chest",
+    "sets": []
+  },
+  {
+    "id": "Flat Dumbbell Bench Press",
+    "name": "Flat Dumbbell Bench Press",
+    "exerciseType": "Dumbbell",
+    "sets": [],
+    "custom": false,
+    "muscleGroup": "Chest"
+  },
+  {
+    "id": "Hack Squat",
+    "custom": false,
+    "muscleGroup": "Quads",
+    "name": "Hack Squat",
+    "exerciseType": "Barbell",
+    "sets": []
+  },
+  {
+    "id": "Hammer Machine Row",
+    "custom": false,
+    "sets": [],
+    "muscleGroup": "Back",
+    "name": "Hammer Machine Row",
+    "exerciseType": "Machine"
+  },
+  {
+    "id": "Hanging Knee Raise",
+    "exerciseType": "Bodyweight",
+    "sets": [],
+    "name": "Hanging Knee Raise",
+    "muscleGroup": "Abs",
+    "custom": false
+  },
+  {
+    "id": "Hanging Straight Leg Raise",
+    "name": "Hanging Straight Leg Raise",
+    "sets": [],
+    "custom": false,
+    "muscleGroup": "Abs",
+    "exerciseType": "Bodyweight"
+  },
+  {
+    "id": "Incline Barbell Bench Press",
+    "muscleGroup": "Chest",
+    "custom": false,
+    "sets": [],
+    "exerciseType": "Barbell",
+    "name": "Incline Barbell Bench Press"
+  },
+  {
+    "id": "Incline Dumbbell Bench Press",
+    "sets": [],
+    "muscleGroup": "Chest",
+    "exerciseType": "Dumbbell",
+    "name": "Incline Dumbbell Bench Press",
+    "custom": false
+  },
+  {
+    "id": "Incline Dumbbell Curl",
+    "name": "Incline Dumbbell Curl",
+    "exerciseType": "Dumbbell",
+    "sets": [],
+    "muscleGroup": "Biceps",
+    "custom": false
+  },
+  {
+    "id": "Lat Pulldowns",
+    "sets": [],
+    "custom": false,
+    "muscleGroup": "Back",
+    "name": "Lat Pulldowns",
+    "exerciseType": "Cable"
+  },
+  {
+    "id": "Leg Extension",
+    "exerciseType": "Machine",
+    "sets": [],
+    "custom": false,
+    "name": "Leg Extension",
+    "muscleGroup": "Quads"
+  },
+  {
+    "id": "Leg Press",
+    "sets": [],
+    "exerciseType": "Machine",
+    "name": "Leg Press",
+    "custom": false,
+    "muscleGroup": "Quads"
+  },
+  {
+    "id": "Leg Press Calves",
+    "muscleGroup": "Calves",
+    "sets": [],
+    "custom": false,
+    "exerciseType": "Machine",
+    "name": "Leg Press Calves"
+  },
+  {
+    "id": "Lying Leg Curl",
+    "sets": [],
+    "exerciseType": "Machine",
+    "custom": false,
+    "muscleGroup": "Hamstrings",
+    "name": "Lying Leg Curl"
+  },
+  {
+    "id": "Machine Crunch",
+    "sets": [],
+    "muscleGroup": "Abs",
+    "custom": false,
+    "name": "Machine Crunch",
+    "exerciseType": "Machine"
+  },
+  {
+    "id": "Machine Flye",
+    "sets": [],
+    "custom": false,
+    "exerciseType": "Machine",
+    "name": "Machine Flye",
+    "muscleGroup": "Chest"
+  },
+  {
+    "id": "Machine Glute Kickback",
+    "sets": [],
+    "custom": false,
+    "name": "Machine Glute Kickback",
+    "exerciseType": "Machine",
+    "muscleGroup": "Glutes"
+  },
+  {
+    "id": "Machine Preacher Curls",
+    "name": "Machine Preacher Curls",
+    "muscleGroup": "Biceps",
+    "custom": false,
+    "exerciseType": "Machine",
+    "sets": []
+  },
+  {
+    "id": "Machine Reverse Flye",
+    "custom": false,
+    "name": "Machine Reverse Flye",
+    "exerciseType": "Machine",
+    "muscleGroup": "Shoulder",
+    "sets": []
+  },
+  {
+    "id": "Machine Shoulder Press",
+    "exerciseType": "Machine",
+    "sets": [],
+    "custom": false,
+    "muscleGroup": "Shoulder",
+    "name": "Machine Shoulder Press"
+  },
+  {
+    "id": "Machine Triceps Pushdown",
+    "custom": false,
+    "name": "Machine Triceps Pushdown",
+    "exerciseType": "Machine",
+    "sets": [],
+    "muscleGroup": "Tricep"
+  },
+  {
+    "id": "Modified Candlestick",
+    "name": "Modified Candlestick",
+    "exerciseType": "Bodyweight",
+    "sets": [],
+    "custom": false,
+    "muscleGroup": "Abs"
+  },
+  {
+    "id": "Normal Grip Front Squat",
+    "muscleGroup": "Quads",
+    "name": "Normal Grip Front Squat",
+    "custom": false,
+    "exerciseType": "Barbell",
+    "sets": []
+  },
+  {
+    "id": "Overhand Cable Flye",
+    "custom": false,
+    "exerciseType": "Cable",
+    "muscleGroup": "Chest",
+    "sets": [],
+    "name": "Overhand Cable Flye"
+  },
+  {
+    "id": "Pullups",
+    "name": "Pullups",
+    "exerciseType": "Bodyweight",
+    "sets": [],
+    "muscleGroup": "Back",
+    "custom": false
+  },
+  {
+    "id": "Pushups",
+    "muscleGroup": "Chest",
+    "exerciseType": "Bodyweight",
+    "sets": [],
+    "name": "Pushups",
+    "custom": false
+  },
+  {
+    "id": "Seated Cable Row",
+    "muscleGroup": "Back",
+    "name": "Seated Cable Row",
+    "exerciseType": "Cable",
+    "custom": false,
+    "sets": []
+  },
+  {
+    "id": "Seated Leg Curl",
+    "muscleGroup": "Hamstrings",
+    "name": "Seated Leg Curl",
+    "custom": false,
+    "exerciseType": "Machine",
+    "sets": []
+  },
+  {
+    "id": "Situps",
+    "name": "Situps",
+    "muscleGroup": "Abs",
+    "exerciseType": "Bodyweight",
+    "custom": false,
+    "sets": []
+  },
+  {
+    "id": "Slant Board Situps",
+    "sets": [],
+    "muscleGroup": "Abs",
+    "custom": false,
+    "name": "Slant Board Situps",
+    "exerciseType": "Bodyweight"
+  },
+  {
+    "id": "Smith Machine Bench Press",
+    "name": "Smith Machine Bench Press",
+    "muscleGroup": "Chest",
+    "exerciseType": "Smith Machine",
+    "sets": [],
+    "custom": false
+  },
+  {
+    "id": "Smith Machine Calves",
+    "muscleGroup": "Calves",
+    "exerciseType": "Smith Machine",
+    "name": "Smith Machine Calves",
+    "custom": false,
+    "sets": []
+  },
+  {
+    "id": "Smith Machine Good Mornings",
+    "muscleGroup": "Hamstrings",
+    "custom": false,
+    "name": "Smith Machine Good Mornings",
+    "sets": [],
+    "exerciseType": "Smith Machine"
+  },
+  {
+    "id": "Smith Machine Row",
+    "exerciseType": "Smith Machine",
+    "muscleGroup": "Back",
+    "sets": [],
+    "custom": false,
+    "name": "Smith Machine Row"
+  },
+  {
+    "id": "Smith Machine Squat",
+    "custom": false,
+    "name": "Smith Machine Squat",
+    "exerciseType": "Smith Machine",
+    "sets": [],
+    "muscleGroup": "Quads"
+  },
+  {
+    "id": "Straight Bar Cable Curl",
+    "custom": false,
+    "exerciseType": "Cable",
+    "muscleGroup": "Biceps",
+    "name": "Straight Bar Cable Curl",
+    "sets": []
+  },
+  {
+    "id": "Underhand Cable Flye",
+    "muscleGroup": "Chest",
+    "name": "Underhand Cable Flye",
+    "custom": false,
+    "sets": [],
+    "exerciseType": "Cable"
+  },
+  {
+    "id": "Weighted Back Raises",
+    "sets": [],
+    "exerciseType": "Bodyweight Loadable",
+    "custom": false,
+    "name": "Weighted Back Raises",
+    "muscleGroup": "Hamstrings"
+  },
+  {
+    "id": "Weighted Pullups",
+    "custom": false,
+    "name": "Weighted Pullups",
+    "exerciseType": "Bodyweight Loadable",
+    "muscleGroup": "Back",
+    "sets": []
+  }
+]
