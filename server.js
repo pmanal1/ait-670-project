@@ -75,10 +75,40 @@ function sendJson(res, status, payload) {
 // answers 422 for choice/score questions ("Endpoint is unavailable"), so we
 // fall back to the free model with one yes/no question per type and take the
 // highest-probability type.
+// Preliminary gate: ask Jev (as a yes/no probability) whether the message is
+// relevant to any of the supported message types before classifying it.
+const RELEVANCE_THRESHOLD = 0.5;
+
 async function handleClassify(req, res) {
   const { text } = await readBody(req);
   if (!text || !text.trim()) {
     return sendJson(res, 400, { error: "text is required" });
+  }
+
+  const relevanceQuestions = {
+    relevant: {
+      type: "noul",
+      instructions: `The message is a request the coach can act on, i.e. it matches at least one of these message types: ${Object.values(
+        QUESTION_INSTRUCTIONS,
+      ).join("; ")}`,
+    },
+  };
+
+  let relevance = null;
+  let lastError = "Relevance check failed";
+  for (const model of [CLASSIFY_MODEL, CLASSIFY_MODEL_FALLBACK]) {
+    const attemptResult = await callSystemOne(model, text, relevanceQuestions);
+    if (attemptResult.ok) {
+      relevance = attemptResult;
+      break;
+    }
+    lastError = attemptResult.error || lastError;
+  }
+  if (!relevance) {
+    return sendJson(res, 502, { error: lastError });
+  }
+  if (relevance.probability < RELEVANCE_THRESHOLD) {
+    return sendJson(res, 200, { relevant: false });
   }
 
   const choiceQuestions = {
@@ -101,7 +131,7 @@ async function handleClassify(req, res) {
   ];
 
   let result = null;
-  let lastError = "Classification failed";
+  lastError = "Classification failed";
   for (const attempt of attempts) {
     const attemptResult = await callSystemOne(attempt.model, text, attempt.questions);
     if (attemptResult.ok) {
@@ -119,7 +149,8 @@ async function handleClassify(req, res) {
   });
 }
 
-async function callSystemOne(model, state, questions) {
+async function callSystemOne(model, state, questions, answerKeys) {
+  const keys = answerKeys || Object.keys(questions);
   try {
     const upstream = await fetch(CLASSIFY_URL, {
       method: "POST",
@@ -146,7 +177,7 @@ async function callSystemOne(model, state, questions) {
     let bestKey = null;
     let bestScore = -1;
     const probabilities = {};
-    for (const key of Object.keys(CLASSIFICATION_TYPES)) {
+    for (const key of keys) {
       const score = answers[key]?.noul ?? 0;
       probabilities[key] = score;
       if (score > bestScore) {

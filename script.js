@@ -244,7 +244,15 @@ async function classifyMessage(text) {
       body: JSON.stringify({ text }),
     });
     const data = await res.json();
-    if (!res.ok || !data.label) throw new Error(data.error || "Classification failed");
+    if (!res.ok) throw new Error(data.error || "Classification failed");
+    if (data.relevant === false) {
+      renderMessage(
+        "assistant",
+        "That doesn't look like a relevant message type. I can help you create a workout, modify a workout, give workout advice, or analyze exercise form. Try asking about one of those."
+      );
+      return;
+    }
+    if (!data.label) throw new Error("Classification failed");
     renderClassification(data.label);
   } catch (err) {
     renderClassification("Unclassified");
