@@ -5,16 +5,29 @@ const chatForm = document.getElementById("chat-form");
 const chatInput = document.getElementById("chat-input");
 const chatMessages = document.getElementById("chat-messages");
 const chatEmptyState = document.getElementById("chat-empty-state");
+const chatSessionList = document.getElementById("chat-session-list");
+const newSessionBtn = document.getElementById("new-session-btn");
 
 const CLASSIFY_API_URL = "/api/classify";
+const SESSIONS_API_URL = "/api/sessions";
+
+let currentSession = null;
+let sessions = [];
 
 loadWorkout();
+loadProfile();
+loadSessions();
 
 sidebarItems.forEach((item) => {
   item.addEventListener("click", (e) => {
     e.preventDefault();
 
     const view = item.dataset.view;
+
+    if (view === "coach" && item.classList.contains("active")) {
+      startNewSession();
+      return;
+    }
 
     sidebarItems.forEach((i) => i.classList.toggle("active", i === item));
     views.forEach((v) => v.classList.toggle("active", v.id === `view-${view}`));
@@ -177,6 +190,199 @@ function updateCompleteButton() {
   workoutCompleteBtn.disabled = !allDone;
 }
 
+// Profile view
+
+const profileRoot = document.getElementById("profile-root");
+
+function loadProfile() {
+  fetch("data/user.json")
+    .then((res) => {
+      if (!res.ok) throw new Error(`Failed to load profile (${res.status})`);
+      return res.json();
+    })
+    .then((data) => renderProfile(data))
+    .catch((err) => {
+      profileRoot.innerHTML = "";
+      const error = document.createElement("p");
+      error.classList.add("chat-disclaimer");
+      error.textContent = `Could not load profile: ${err.message}`;
+      profileRoot.appendChild(error);
+    });
+}
+
+function renderProfile(user) {
+  profileRoot.innerHTML = "";
+
+  const initials = user.name
+    .split(/\s+/)
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
+  const heightCm = user.height?.cm;
+  const weightKg = user.weight?.kg;
+  const bmi =
+    heightCm && weightKg
+      ? (weightKg / Math.pow(heightCm / 100, 2)).toFixed(1)
+      : null;
+
+  const header = document.createElement("div");
+  header.classList.add("profile-header");
+
+  const avatar = document.createElement("div");
+  avatar.classList.add("profile-avatar");
+  avatar.textContent = initials;
+
+  const identity = document.createElement("div");
+  identity.classList.add("profile-identity");
+
+  const name = document.createElement("h1");
+  name.classList.add("profile-name");
+  name.textContent = user.name;
+
+  const badges = document.createElement("div");
+  badges.classList.add("profile-badges");
+
+  const experience = document.createElement("span");
+  experience.classList.add("profile-badge");
+  experience.textContent = user.experienceLevel;
+
+  const units = document.createElement("span");
+  units.classList.add("profile-badge");
+  units.textContent =
+    user.preferences?.units === "metric" ? "Metric (kg/cm)" : "Imperial (lb/ft)";
+
+  badges.append(experience, units);
+  identity.append(name, badges);
+  header.append(avatar, identity);
+  profileRoot.appendChild(header);
+
+  const stats = document.createElement("div");
+  stats.classList.add("profile-stats");
+
+  const statData = [
+    { label: "Height", value: heightCm ? `${heightCm} cm` : "—" },
+    { label: "Weight", value: weightKg ? `${weightKg} kg` : "—" },
+    { label: "BMI", value: bmi ?? "—" },
+    {
+      label: "Workout Days",
+      value: user.preferences?.workoutDaysPerWeek
+        ? `${user.preferences.workoutDaysPerWeek} / week`
+        : "—",
+    },
+  ];
+
+  statData.forEach(({ label, value }) => {
+    const stat = document.createElement("div");
+    stat.classList.add("profile-stat");
+
+    const statLabel = document.createElement("div");
+    statLabel.classList.add("profile-stat-label");
+    statLabel.textContent = label;
+
+    const statValue = document.createElement("div");
+    statValue.classList.add("profile-stat-value");
+    statValue.textContent = value;
+
+    stat.append(statLabel, statValue);
+    stats.appendChild(stat);
+  });
+
+  profileRoot.appendChild(stats);
+
+  const columns = document.createElement("div");
+  columns.classList.add("profile-columns");
+
+  columns.appendChild(
+    renderProfileCard("Goals", user.goals || [], (goal) => goal)
+  );
+
+  const preferencesList = [];
+  if (user.preferences?.equipmentAccess) {
+    preferencesList.push({
+      title: "Equipment Access",
+      items: user.preferences.equipmentAccess,
+    });
+  }
+  if (user.preferences?.preferredMuscleGroups) {
+    preferencesList.push({
+      title: "Preferred Muscle Groups",
+      items: user.preferences.preferredMuscleGroups,
+    });
+  }
+
+  const prefsCard = document.createElement("div");
+  prefsCard.classList.add("profile-card");
+
+  preferencesList.forEach(({ title, items }) => {
+    prefsCard.appendChild(renderProfileSectionTitle(title));
+    prefsCard.appendChild(renderChipList(items));
+  });
+
+  if (user.preferences?.notifications !== undefined) {
+    prefsCard.appendChild(renderProfileSectionTitle("Notifications"));
+    const toggleRow = document.createElement("div");
+    toggleRow.classList.add("profile-toggle-row");
+
+    const toggleText = document.createElement("span");
+    toggleText.classList.add("profile-toggle-text");
+    toggleText.textContent = "Workout reminders";
+
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.classList.add("profile-toggle");
+    toggle.setAttribute("role", "switch");
+    toggle.setAttribute(
+      "aria-checked",
+      String(Boolean(user.preferences.notifications))
+    );
+    toggle.classList.toggle("profile-toggle-on", Boolean(user.preferences.notifications));
+    const knob = document.createElement("div");
+    knob.classList.add("profile-toggle-knob");
+    toggle.appendChild(knob);
+
+    toggle.addEventListener("click", () => {
+      user.preferences.notifications = !user.preferences.notifications;
+      toggle.classList.toggle("profile-toggle-on", user.preferences.notifications);
+      toggle.setAttribute("aria-checked", String(user.preferences.notifications));
+    });
+
+    toggleRow.append(toggleText, toggle);
+    prefsCard.appendChild(toggleRow);
+  }
+
+  columns.appendChild(prefsCard);
+  profileRoot.appendChild(columns);
+}
+
+function renderProfileCard(title, items, format) {
+  const card = document.createElement("div");
+  card.classList.add("profile-card");
+  card.appendChild(renderProfileSectionTitle(title));
+  card.appendChild(renderChipList(items.map(format)));
+  return card;
+}
+
+function renderProfileSectionTitle(title) {
+  const heading = document.createElement("h2");
+  heading.classList.add("profile-section-title");
+  heading.textContent = title;
+  return heading;
+}
+
+function renderChipList(items) {
+  const list = document.createElement("div");
+  list.classList.add("profile-chip-list");
+  items.forEach((item) => {
+    const chip = document.createElement("span");
+    chip.classList.add("profile-chip");
+    chip.textContent = item;
+    list.appendChild(chip);
+  });
+  return list;
+}
+
 const modalOverlay = document.getElementById("modal-overlay");
 const modalCloseBtn = document.getElementById("modal-close-btn");
 
@@ -201,6 +407,91 @@ chatForm.addEventListener("submit", (e) => {
   sendMessage();
 });
 
+newSessionBtn.addEventListener("click", startNewSession);
+
+function startNewSession() {
+  currentSession = null;
+  renderSessionList();
+  clearChatMessages();
+  chatInput.focus();
+}
+
+function clearChatMessages() {
+  chatMessages.innerHTML = "";
+  chatEmptyState.style.display = "";
+  chatMessages.appendChild(chatEmptyState);
+}
+
+function renderSessionList() {
+  chatSessionList.innerHTML = "";
+  sessions.forEach((session) => {
+    const item = document.createElement("li");
+    item.classList.add("chat-session-item");
+    if (currentSession?.id === session.id) item.classList.add("active");
+    item.textContent = session.title;
+    item.addEventListener("click", () => switchSession(session.id));
+    chatSessionList.appendChild(item);
+  });
+}
+
+async function loadSessions() {
+  try {
+    const res = await fetch(SESSIONS_API_URL);
+    if (!res.ok) return;
+    sessions = (await res.json()).sessions || [];
+    renderSessionList();
+  } catch {
+    // leave sidebar empty if the store is unreachable
+  }
+}
+
+async function switchSession(id) {
+  if (currentSession?.id === id) return;
+  try {
+    const res = await fetch(`${SESSIONS_API_URL}/${id}`);
+    if (!res.ok) throw new Error(`Failed to load session (${res.status})`);
+    currentSession = await res.json();
+    renderSessionList();
+    renderSession(currentSession);
+  } catch {
+    // keep the current view if loading fails
+  }
+}
+
+function renderSession(session) {
+  chatMessages.innerHTML = "";
+  if (session.messages.length) {
+    chatEmptyState.style.display = "none";
+  } else {
+    chatEmptyState.style.display = "";
+    chatMessages.appendChild(chatEmptyState);
+  }
+  session.messages.forEach((message) => {
+    if (message.type === "classification") renderClassification(message.content);
+    else renderMessage(message.role, message.content);
+  });
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+async function createSession(title) {
+  const res = await fetch(SESSIONS_API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title: title.slice(0, 60) }),
+  });
+  if (!res.ok) throw new Error(`Failed to create session (${res.status})`);
+  return res.json();
+}
+
+async function appendSessionMessage(sessionId, message) {
+  const res = await fetch(`${SESSIONS_API_URL}/${sessionId}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(message),
+  });
+  if (!res.ok) throw new Error(`Failed to save message (${res.status})`);
+}
+
 function sendMessage() {
   const text = chatInput.value.trim();
   if (!text) return;
@@ -211,7 +502,20 @@ function sendMessage() {
   chatInput.style.height = "auto";
   chatInput.focus();
 
-  classifyMessage(text);
+  (async () => {
+    if (!currentSession) {
+      try {
+        currentSession = await createSession(text);
+        await loadSessions();
+      } catch {
+        currentSession = null;
+      }
+    }
+    if (currentSession) {
+      appendSessionMessage(currentSession.id, { role: "user", content: text }).catch(() => {});
+    }
+    await classifyMessage(text);
+  })();
 }
 
 function renderMessage(role, content) {
@@ -237,6 +541,10 @@ function renderClassification(label) {
 }
 
 async function classifyMessage(text) {
+  const save = (message) =>
+    currentSession
+      ? appendSessionMessage(currentSession.id, message).catch(() => {})
+      : Promise.resolve();
   try {
     const res = await fetch(CLASSIFY_API_URL, {
       method: "POST",
@@ -246,15 +554,17 @@ async function classifyMessage(text) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Classification failed");
     if (data.relevant === false) {
-      renderMessage(
-        "assistant",
-        "That doesn't look like a relevant message type. I can help you create a workout, modify a workout, give workout advice, or analyze exercise form. Try asking about one of those."
-      );
+      const reply =
+        "That doesn't look like a relevant message type. I can help you create a workout, modify a workout, give workout advice, or analyze exercise form. Try asking about one of those.";
+      renderMessage("assistant", reply);
+      await save({ role: "assistant", content: reply });
       return;
     }
     if (!data.label) throw new Error("Classification failed");
     renderClassification(data.label);
+    await save({ type: "classification", content: data.label });
   } catch (err) {
     renderClassification("Unclassified");
+    await save({ type: "classification", content: "Unclassified" });
   }
 }
