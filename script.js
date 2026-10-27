@@ -9,6 +9,7 @@ const chatEmptyState = document.getElementById("chat-empty-state");
 const CLASSIFY_API_URL = "/api/classify";
 
 loadWorkout();
+loadProfile();
 
 sidebarItems.forEach((item) => {
   item.addEventListener("click", (e) => {
@@ -175,6 +176,199 @@ function updateCompleteButton() {
       exercise.sets.every((set) => set.complete)
     );
   workoutCompleteBtn.disabled = !allDone;
+}
+
+// Profile view
+
+const profileRoot = document.getElementById("profile-root");
+
+function loadProfile() {
+  fetch("data/user.json")
+    .then((res) => {
+      if (!res.ok) throw new Error(`Failed to load profile (${res.status})`);
+      return res.json();
+    })
+    .then((data) => renderProfile(data))
+    .catch((err) => {
+      profileRoot.innerHTML = "";
+      const error = document.createElement("p");
+      error.classList.add("chat-disclaimer");
+      error.textContent = `Could not load profile: ${err.message}`;
+      profileRoot.appendChild(error);
+    });
+}
+
+function renderProfile(user) {
+  profileRoot.innerHTML = "";
+
+  const initials = user.name
+    .split(/s+/)
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
+  const heightCm = user.height?.cm;
+  const weightKg = user.weight?.kg;
+  const bmi =
+    heightCm && weightKg
+      ? (weightKg / Math.pow(heightCm / 100, 2)).toFixed(1)
+      : null;
+
+  const header = document.createElement("div");
+  header.classList.add("profile-header");
+
+  const avatar = document.createElement("div");
+  avatar.classList.add("profile-avatar");
+  avatar.textContent = initials;
+
+  const identity = document.createElement("div");
+  identity.classList.add("profile-identity");
+
+  const name = document.createElement("h1");
+  name.classList.add("profile-name");
+  name.textContent = user.name;
+
+  const badges = document.createElement("div");
+  badges.classList.add("profile-badges");
+
+  const experience = document.createElement("span");
+  experience.classList.add("profile-badge");
+  experience.textContent = user.experienceLevel;
+
+  const units = document.createElement("span");
+  units.classList.add("profile-badge");
+  units.textContent =
+    user.preferences?.units === "metric" ? "Metric (kg/cm)" : "Imperial (lb/ft)";
+
+  badges.append(experience, units);
+  identity.append(name, badges);
+  header.append(avatar, identity);
+  profileRoot.appendChild(header);
+
+  const stats = document.createElement("div");
+  stats.classList.add("profile-stats");
+
+  const statData = [
+    { label: "Height", value: heightCm ? `${heightCm} cm` : "—" },
+    { label: "Weight", value: weightKg ? `${weightKg} kg` : "—" },
+    { label: "BMI", value: bmi ?? "—" },
+    {
+      label: "Workout Days",
+      value: user.preferences?.workoutDaysPerWeek
+        ? `${user.preferences.workoutDaysPerWeek} / week`
+        : "—",
+    },
+  ];
+
+  statData.forEach(({ label, value }) => {
+    const stat = document.createElement("div");
+    stat.classList.add("profile-stat");
+
+    const statLabel = document.createElement("div");
+    statLabel.classList.add("profile-stat-label");
+    statLabel.textContent = label;
+
+    const statValue = document.createElement("div");
+    statValue.classList.add("profile-stat-value");
+    statValue.textContent = value;
+
+    stat.append(statLabel, statValue);
+    stats.appendChild(stat);
+  });
+
+  profileRoot.appendChild(stats);
+
+  const columns = document.createElement("div");
+  columns.classList.add("profile-columns");
+
+  columns.appendChild(
+    renderProfileCard("Goals", user.goals || [], (goal) => goal)
+  );
+
+  const preferencesList = [];
+  if (user.preferences?.equipmentAccess) {
+    preferencesList.push({
+      title: "Equipment Access",
+      items: user.preferences.equipmentAccess,
+    });
+  }
+  if (user.preferences?.preferredMuscleGroups) {
+    preferencesList.push({
+      title: "Preferred Muscle Groups",
+      items: user.preferences.preferredMuscleGroups,
+    });
+  }
+
+  const prefsCard = document.createElement("div");
+  prefsCard.classList.add("profile-card");
+
+  preferencesList.forEach(({ title, items }) => {
+    prefsCard.appendChild(renderProfileSectionTitle(title));
+    prefsCard.appendChild(renderChipList(items));
+  });
+
+  if (user.preferences?.notifications !== undefined) {
+    prefsCard.appendChild(renderProfileSectionTitle("Notifications"));
+    const toggleRow = document.createElement("div");
+    toggleRow.classList.add("profile-toggle-row");
+
+    const toggleText = document.createElement("span");
+    toggleText.classList.add("profile-toggle-text");
+    toggleText.textContent = "Workout reminders";
+
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.classList.add("profile-toggle");
+    toggle.setAttribute("role", "switch");
+    toggle.setAttribute(
+      "aria-checked",
+      String(Boolean(user.preferences.notifications))
+    );
+    toggle.classList.toggle("profile-toggle-on", Boolean(user.preferences.notifications));
+    const knob = document.createElement("div");
+    knob.classList.add("profile-toggle-knob");
+    toggle.appendChild(knob);
+
+    toggle.addEventListener("click", () => {
+      user.preferences.notifications = !user.preferences.notifications;
+      toggle.classList.toggle("profile-toggle-on", user.preferences.notifications);
+      toggle.setAttribute("aria-checked", String(user.preferences.notifications));
+    });
+
+    toggleRow.append(toggleText, toggle);
+    prefsCard.appendChild(toggleRow);
+  }
+
+  columns.appendChild(prefsCard);
+  profileRoot.appendChild(columns);
+}
+
+function renderProfileCard(title, items, format) {
+  const card = document.createElement("div");
+  card.classList.add("profile-card");
+  card.appendChild(renderProfileSectionTitle(title));
+  card.appendChild(renderChipList(items.map(format)));
+  return card;
+}
+
+function renderProfileSectionTitle(title) {
+  const heading = document.createElement("h2");
+  heading.classList.add("profile-section-title");
+  heading.textContent = title;
+  return heading;
+}
+
+function renderChipList(items) {
+  const list = document.createElement("div");
+  list.classList.add("profile-chip-list");
+  items.forEach((item) => {
+    const chip = document.createElement("span");
+    chip.classList.add("profile-chip");
+    chip.textContent = item;
+    list.appendChild(chip);
+  });
+  return list;
 }
 
 const modalOverlay = document.getElementById("modal-overlay");
