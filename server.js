@@ -341,7 +341,7 @@ function sanitizeGeneratedWorkout(parsed, catalog, baseWorkout) {
   };
 }
 
-async function callGo(systemPrompt, userContent, sessionTag = "spotme-workout", maxTokens = 4000) {
+async function callGo(messages, maxTokens = 4000, sessionTag = "spotme-create-workout") {
   const response = await fetch(GO_URL, {
     method: "POST",
     headers: {
@@ -352,10 +352,7 @@ async function callGo(systemPrompt, userContent, sessionTag = "spotme-workout", 
     },
     body: JSON.stringify({
       model: GO_MODEL,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userContent },
-      ],
+      messages,
       max_tokens: maxTokens,
     }),
   });
@@ -383,10 +380,13 @@ async function handleCreateWorkout(req, res) {
   }
 
   try {
-    const content = await callGo(
-      buildWorkoutPrompt(),
-      `User profile:\n${JSON.stringify(user, null, 2)}\n\nExercise catalog (JSON):\n${JSON.stringify(catalog)}\n\nRequest:\n${text.trim()}`
-    );
+    const content = await callGo([
+      { role: "system", content: buildWorkoutPrompt() },
+      {
+        role: "user",
+        content: `User profile:\n${JSON.stringify(user, null, 2)}\n\nExercise catalog (JSON):\n${JSON.stringify(catalog)}\n\nRequest:\n${text.trim()}`,
+      },
+    ]);
     const workout = sanitizeGeneratedWorkout(parseModelJson(content), catalog);
     fs.writeFileSync(WORKOUT_FILE, JSON.stringify(workout, null, 2) + "\n");
     console.log(`Replaced data/workout.json with generated workout (${workout.exercises.length} exercises)`);
@@ -470,8 +470,11 @@ async function handleModifyWorkout(req, res) {
 
   try {
     const content = await callGo(
-      buildModifyWorkoutPrompt(),
-      fullContent,
+      [
+        { role: "system", content: buildModifyWorkoutPrompt() },
+        { role: "user", content: fullContent },
+      ],
+      4000,
       "spotme-modify-workout"
     );
     const workout = sanitizeGeneratedWorkout(
@@ -488,6 +491,50 @@ async function handleModifyWorkout(req, res) {
     });
   } catch (err) {
     console.error("Workout modification failed:", err.message);
+    sendJson(res, 502, { error: err.message });
+  }
+}
+
+// Give Workout Advice: send the whole session context (all prior user and
+// assistant messages, plus the new prompt) to GLM-5.3-Flash (OpenCode Go) and
+// return concise workout advice.
+const ADVICE_SYSTEM_PROMPT = `You are SpotMe, an AI workout coach. Give concise workout advice in reply to the user's latest message.
+
+Rules:
+- Keep the answer short: 2-4 sentences, or at most a compact bullet list.
+- Be practical and specific; no long essays, no disclaimers.
+- Tailor the advice to the conversation history and the user's profile when relevant.`;
+
+async function handleGiveWorkoutAdvice(req, res) {
+  const { text, sessionId } = await readBody(req);
+  if (!text || !text.trim()) {
+    return sendJson(res, 400, { error: "text is required" });
+  }
+
+  const session = typeof sessionId === "string" ? readSession(sessionId) : null;
+  const history = (session?.messages || [])
+    .filter((m) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content.trim())
+    .map((m) => ({ role: m.role, content: m.content.trim() }));
+  // The client also persists the newest user message; avoid sending it twice.
+  const last = history[history.length - 1];
+  if (last && last.role === "user" && last.content === text.trim()) history.pop();
+
+  const user = readJsonFile("data/user.json");
+  const systemContent = `${ADVICE_SYSTEM_PROMPT}\n\nUser profile:\n${JSON.stringify(user, null, 2)}`;
+
+  try {
+    const reply = await callGo(
+      [
+        { role: "system", content: systemContent },
+        ...history,
+        { role: "user", content: text.trim() },
+      ],
+      1000,
+      sessionId ? `spotme-advice-${sessionId}` : "spotme-advice"
+    );
+    sendJson(res, 200, { reply, sessionId });
+  } catch (err) {
+    console.error("Workout advice failed:", err.message);
     sendJson(res, 502, { error: err.message });
   }
 }
@@ -640,6 +687,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && pathname === "/api/confirm-workout") return handleConfirmWorkout(res);
     if (req.method === "DELETE" && pathname === "/api/confirm-workout") return handleDiscardWorkout(res);
     if (req.method === "GET" && pathname === "/api/pending-workout") return handleGetPendingWorkout(res);
+    if (req.method === "POST" && pathname === "/api/give-workout-advice") return await handleGiveWorkoutAdvice(req, res);
     if (req.method === "GET" && pathname === "/api/sessions") return sendJson(res, 200, { sessions: listSessions() });
     if (req.method === "POST" && pathname === "/api/sessions") return await handleCreateSession(req, res);
     if (req.method === "PATCH" && messageMatch) {
