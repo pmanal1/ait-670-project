@@ -64,6 +64,10 @@ const CLASSIFY_URL = "https://opencode.ai/zen/v1/systemone";
 const CLASSIFY_MODEL = "jev-1.13";
 const CLASSIFY_MODEL_FALLBACK = "jev-1.13-free";
 
+// Workout generation via OpenCode Go (https://opencode.ai/v2/docs/console/go/)
+const GO_URL = "https://opencode.ai/inference/go/openai/v1/chat/completions";
+const GO_MODEL = "glm-5.3-flash";
+
 // Preferred: a single "choice" question on the paid model. If that fails
 // (e.g. out of funds), classification falls back to the free model with one
 // yes/no question per type; the highest-probability type wins.
@@ -238,6 +242,152 @@ async function callSystemOne(model, state, questions, answerKeys) {
   }
 }
 
+// Create Workout: send the classified prompt, the user's profile and the
+// exercise catalog to GLM-5.3-Flash (OpenCode Go) and have it replace
+// data/workout.json with the generated plan.
+function readJsonFile(relPath) {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(__dirname, relPath), "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+const WORKOUT_FILE = path.join(__dirname, "data", "workout.json");
+
+function buildWorkoutPrompt() {
+  return `You are SpotMe, an AI workout coach. Generate a workout plan from the request below.
+
+Respond with ONLY a JSON object (no markdown fences, no commentary) matching exactly this schema:
+
+{
+  "name": "short workout name",
+  "exercises": [
+    {
+      "id": "catalog exercise id, copied verbatim",
+      "name": "catalog exercise name, copied verbatim",
+      "custom": false,
+      "exerciseType": "catalog exerciseType, copied verbatim",
+      "sets": [
+        { "weight": -1, "reps": -1, "complete": false, "rir": "RIR 1" }
+      ]
+    }
+  ]
+}
+
+Rules:
+- Only pick exercises from the exercise catalog. Copy id, name and exerciseType exactly as written there.
+- Output ONLY the keys above. Never include instructions, videos, url, difficulty, muscleGroup, secondaryMuscleGroups or any other keys.
+- Each set stays a placeholder: weight -1, reps -1, complete false.
+- Choose set counts (2-5) and rir strings ("RIR 0", "RIR 1", "RIR 2") that fit the request, the user's goals and experience level.
+- Respect the equipment the user has access to and any preferred muscle groups.`;
+}
+
+function parseModelJson(content) {
+  const fenced = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+  const raw = (fenced ? fenced[1] : content).trim();
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  return JSON.parse(raw.slice(start, end + 1));
+}
+
+function sanitizeGeneratedWorkout(parsed, catalog) {
+  const byId = new Map(catalog.map((ex) => [ex.id, ex]));
+  const byName = new Map(catalog.map((ex) => [ex.name.toLowerCase(), ex]));
+
+  const exercises = (Array.isArray(parsed.exercises) ? parsed.exercises : [])
+    .map((ex) => {
+      const match = byId.get(ex?.id) || byName.get(String(ex?.name || "").toLowerCase());
+      if (!match) return null;
+      const sets = (Array.isArray(ex.sets) ? ex.sets : [])
+        .slice(0, 10)
+        .map((s) => ({
+          weight: -1,
+          reps: -1,
+          complete: false,
+          rir: /RIR/i.test(String(s?.rir || "")) ? s.rir : "RIR 1",
+        }));
+      return {
+        id: match.id,
+        name: match.name,
+        custom: false,
+        exerciseType: match.exerciseType,
+        sets,
+      };
+    })
+    .filter(Boolean);
+
+  if (!exercises.length) {
+    throw new Error("The model did not return any exercises from the catalog");
+  }
+
+  return {
+    id: `workout-${Date.now()}`,
+    name: typeof parsed.name === "string" && parsed.name.trim() ? parsed.name.trim() : "Generated Workout",
+    date: new Date().toISOString().slice(0, 10),
+    exercises,
+  };
+}
+
+async function callGo(userContent, maxTokens = 4000) {
+  const response = await fetch(GO_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${env.OPENCODE_GO_API_KEY}`,
+      "User-Agent": "ait-670-spotme/0.1",
+      "x-opencode-session": "spotme-create-workout",
+    },
+    body: JSON.stringify({
+      model: GO_MODEL,
+      messages: [
+        { role: "system", content: buildWorkoutPrompt() },
+        { role: "user", content: userContent },
+      ],
+      max_tokens: maxTokens,
+    }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error?.message || `GLM request failed (${response.status})`);
+  }
+  return data.choices?.[0]?.message?.content || "";
+}
+
+async function handleCreateWorkout(req, res) {
+  const { text, sessionId } = await readBody(req);
+  if (!text || !text.trim()) {
+    return sendJson(res, 400, { error: "text is required" });
+  }
+  const user = readJsonFile("data/user.json");
+  const catalog = (readJsonFile("data/exercises.json") || []).map((ex) => ({
+    id: ex.id,
+    name: ex.name,
+    exerciseType: ex.exerciseType,
+    muscleGroup: ex.muscleGroup,
+  }));
+  if (!catalog.length) {
+    return sendJson(res, 500, { error: "Exercise catalog is unavailable" });
+  }
+
+  try {
+    const content = await callGo(
+      `User profile:\n${JSON.stringify(user, null, 2)}\n\nExercise catalog (JSON):\n${JSON.stringify(catalog)}\n\nRequest:\n${text.trim()}`
+    );
+    const workout = sanitizeGeneratedWorkout(parseModelJson(content), catalog);
+    fs.writeFileSync(WORKOUT_FILE, JSON.stringify(workout, null, 2) + "\n");
+    console.log(`Replaced data/workout.json with generated workout (${workout.exercises.length} exercises)`);
+    sendJson(res, 200, {
+      workout,
+      savedTo: "data/workout.json",
+      sessionId: typeof sessionId === "string" ? sessionId : undefined,
+    });
+  } catch (err) {
+    console.error("Workout generation failed:", err.message);
+    sendJson(res, 502, { error: err.message });
+  }
+}
+
 // Chat session endpoints
 async function handleCreateSession(req, res) {
   const { title } = await readBody(req);
@@ -314,6 +464,7 @@ const server = http.createServer(async (req, res) => {
   const sessionMatch = pathname.match(/^\/api\/sessions\/(\d+)\/messages$/) || pathname.match(/^\/api\/sessions\/(\d+)$/);
   try {
     if (req.method === "POST" && pathname === "/api/classify") return await handleClassify(req, res);
+    if (req.method === "POST" && pathname === "/api/create-workout") return await handleCreateWorkout(req, res);
     if (req.method === "GET" && pathname === "/api/sessions") return sendJson(res, 200, { sessions: listSessions() });
     if (req.method === "POST" && pathname === "/api/sessions") return await handleCreateSession(req, res);
     if (req.method === "DELETE" && !pathname.endsWith("/messages") && pathname.startsWith("/api/sessions/")) {
