@@ -502,6 +502,22 @@ body {
   padding-right: 0;
 }
 
+.chat-message.chat-pending {
+  font-size: 13px;
+  color: #71717a;
+  animation: chat-pending-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes chat-pending-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 .chat-classification {
   align-self: flex-start;
   display: inline-flex;
@@ -593,6 +609,20 @@ body {
   text-align: center;
   font-size: 12px;
   color: #71717a;
+}
+
+.chat-workout-link {
+  align-self: flex-start;
+  margin-top: -16px;
+  color: #a1a1aa;
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.chat-workout-link:hover {
+  color: #e4e4e7;
 }
 
 /* Workout view */

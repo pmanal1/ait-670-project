@@ -9,6 +9,7 @@ const chatSessionList = document.getElementById("chat-session-list");
 const newSessionBtn = document.getElementById("new-session-btn");
 
 const CLASSIFY_API_URL = "/api/classify";
+const CREATE_WORKOUT_API_URL = "/api/create-workout";
 const SESSIONS_API_URL = "/api/sessions";
 
 let currentSession = null;
@@ -59,7 +60,7 @@ workoutCompleteBtn.addEventListener("click", () => {
 });
 
 function loadWorkout() {
-  fetch("data/workout.json")
+  fetch("data/workout.json", { cache: "no-store" })
     .then((res) => {
       if (!res.ok) throw new Error(`Failed to load workout (${res.status})`);
       return res.json();
@@ -188,6 +189,17 @@ function updateCompleteButton() {
       exercise.sets.every((set) => set.complete)
     );
   workoutCompleteBtn.disabled = !allDone;
+}
+
+function activateView(view) {
+  const target = [...sidebarItems].find((item) => item.dataset.view === view);
+  if (!target) return;
+  sidebarItems.forEach((i) => i.classList.toggle("active", i === target));
+  views.forEach((v) => v.classList.toggle("active", v.id === `view-${view}`));
+}
+
+function switchToWorkoutView() {
+  activateView("workout");
 }
 
 // Profile view
@@ -587,6 +599,7 @@ async function switchSession(id) {
     currentSession = await res.json();
     renderSessionList();
     renderSession(currentSession);
+    activateView("coach");
   } catch {
     // keep the current view if loading fails
   }
@@ -697,8 +710,52 @@ async function classifyMessage(text) {
     if (!data.label) throw new Error("Classification failed");
     renderClassification(data.label);
     await save({ type: "classification", content: data.label });
+    if (data.label === "Create Workout") await runCreateWorkout(text, save);
   } catch (err) {
     renderClassification("Unclassified");
     await save({ type: "classification", content: "Unclassified" });
+  }
+}
+
+async function runCreateWorkout(text, save) {
+  const pending = renderMessage(
+    "assistant",
+    "Generating your workout. I'm picking exercises from the catalog to fit your profile..."
+  );
+  pending.classList.add("chat-pending");
+  try {
+    const res = await fetch(CREATE_WORKOUT_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, sessionId: currentSession?.id }),
+    });
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error(`Workout service returned an unexpected response (${res.status})`);
+    }
+    if (!res.ok) throw new Error(data.error || `Workout generation failed (${res.status})`);
+    const exercises = data.workout.exercises;
+    pending.textContent = `Done! Your new workout "${data.workout.name}" is ready with ${exercises.length} exercises.`;
+    pending.classList.remove("chat-pending");
+    save({ role: "assistant", content: pending.textContent }).catch(() => {});
+
+    const link = document.createElement("a");
+    link.href = "#";
+    link.classList.add("chat-workout-link");
+    link.textContent = "View your workout";
+    link.addEventListener("click", (e) => {
+      e.preventDefault();
+      loadWorkout();
+      switchToWorkoutView();
+    });
+    chatMessages.appendChild(link);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    loadWorkout();
+  } catch (err) {
+    pending.textContent = `I couldn't generate your workout: ${err.message}`;
+    pending.classList.remove("chat-pending");
+    save({ role: "assistant", content: pending.textContent }).catch(() => {});
   }
 }
