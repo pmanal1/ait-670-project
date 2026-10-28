@@ -32,6 +32,19 @@ sidebarItems.forEach((item) => {
 
     sidebarItems.forEach((i) => i.classList.toggle("active", i === item));
     views.forEach((v) => v.classList.toggle("active", v.id === `view-${view}`));
+
+    if (view === "coach" && !currentSession) clearChatMessages();
+
+    if (
+      view === "coach" &&
+      chatEmptyState.style.display === "none" &&
+      ![...chatMessages.querySelectorAll(".chat-suggestion-grid")].some(
+        (grid) => !chatEmptyState.contains(grid)
+      )
+    ) {
+      chatMessages.appendChild(createSuggestionGrid());
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
   });
 });
 
@@ -606,11 +619,11 @@ async function switchSession(id) {
 
 function renderSession(session) {
   chatMessages.innerHTML = "";
+  chatMessages.appendChild(chatEmptyState);
   if (session.messages.length) {
     chatEmptyState.style.display = "none";
   } else {
     chatEmptyState.style.display = "";
-    chatMessages.appendChild(chatEmptyState);
   }
   session.messages.forEach((message) => {
     if (message.type === "classification") renderClassification(message.content);
@@ -701,7 +714,7 @@ function sendMessage() {
   if (!text) return;
 
   chatMessages.querySelectorAll(".chat-suggestion-grid").forEach((grid) => {
-    if (grid.parentElement !== chatEmptyState) grid.remove();
+    if (!chatEmptyState.contains(grid)) grid.remove();
   });
 
   renderMessage("user", text);
