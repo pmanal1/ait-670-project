@@ -33,3 +33,8 @@ ait-670-project/
 Messages sent in the Coach view are classified by Jev (jev-1.13) into one
 of: Create Workout, Modify Workout, Give Workout Advice, or Analyze Form, and
 the label is shown in the chat.
+
+"Create Workout" prompts generate `data/workout.json` via GLM-5.3-Flash
+(OpenCode Go). "Give Workout Advice" prompts get concise advice from
+GLM-5.3-Flash using the whole session context; once a session is classified as
+advice, every later prompt in that session stays in advice mode.

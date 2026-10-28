@@ -10,6 +10,7 @@ const newSessionBtn = document.getElementById("new-session-btn");
 
 const CLASSIFY_API_URL = "/api/classify";
 const CREATE_WORKOUT_API_URL = "/api/create-workout";
+const WORKOUT_ADVICE_API_URL = "/api/give-workout-advice";
 const SESSIONS_API_URL = "/api/sessions";
 
 let currentSession = null;
@@ -649,6 +650,7 @@ async function appendSessionMessage(sessionId, message) {
     body: JSON.stringify(message),
   });
   if (!res.ok) throw new Error(`Failed to save message (${res.status})`);
+  if (currentSession?.id === sessionId) currentSession.messages.push({ ...message });
 }
 
 const SUGGESTIONS = [
@@ -744,10 +746,67 @@ function renderMessage(role, content) {
 
   const message = document.createElement("div");
   message.classList.add("chat-message", role);
-  message.textContent = content;
+  if (role === "assistant") message.appendChild(renderMarkdown(content));
+  else message.textContent = content;
   chatMessages.appendChild(message);
   chatMessages.scrollTop = chatMessages.scrollHeight;
   return message;
+}
+
+// Minimal markdown renderer for assistant replies: paragraphs, bullet and
+// numbered lists, **bold**, *italic* and `code`. Text goes in via text nodes,
+// so everything is escaped by construction.
+function renderInline(text) {
+  const frag = document.createDocumentFragment();
+  const pattern = /\*\*([^*]+)\*\*|\*([^*\s][^*]*)\*|`([^`]+)`/g;
+  let last = 0;
+  let match;
+  while ((match = pattern.exec(text))) {
+    if (match.index > last) frag.appendChild(document.createTextNode(text.slice(last, match.index)));
+    if (match[1] !== undefined) {
+      const bold = document.createElement("strong");
+      bold.textContent = match[1];
+      frag.appendChild(bold);
+    } else if (match[2] !== undefined) {
+      const italic = document.createElement("em");
+      italic.textContent = match[2];
+      frag.appendChild(italic);
+    } else {
+      const code = document.createElement("code");
+      code.textContent = match[3];
+      frag.appendChild(code);
+    }
+    last = pattern.lastIndex;
+  }
+  if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+  return frag;
+}
+
+function renderMarkdown(content) {
+  const container = document.createElement("div");
+  container.classList.add("chat-markdown");
+  let list = null;
+  content.split("\n").forEach((line) => {
+    const bullet = line.match(/^\s*[-*]\s+(.*)$/);
+    const numbered = line.match(/^\s*\d+[.)]\s+(.*)$/);
+    if (bullet || numbered) {
+      const tag = numbered ? "ol" : "ul";
+      if (!list || list.tagName !== tag.toUpperCase()) {
+        list = document.createElement(tag);
+        container.appendChild(list);
+      }
+      const item = document.createElement("li");
+      item.appendChild(renderInline(numbered ? numbered[1] : bullet[1]));
+      list.appendChild(item);
+      return;
+    }
+    list = null;
+    if (!line.trim()) return;
+    const paragraph = document.createElement("p");
+    paragraph.appendChild(renderInline(line));
+    container.appendChild(paragraph);
+  });
+  return container;
 }
 
 function renderClassification(label) {
@@ -767,6 +826,13 @@ async function classifyMessage(text) {
       ? appendSessionMessage(currentSession.id, message).catch(() => {})
       : Promise.resolve();
   try {
+    // Once a session is in advice mode, every later prompt stays advice and
+    // the whole session context is sent to the model.
+    if (isAdviceSession()) {
+      renderClassification("Give Workout Advice");
+      await save({ type: "classification", content: "Give Workout Advice" });
+      return await runGiveWorkoutAdvice(text, save);
+    }
     const res = await fetch(CLASSIFY_API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -787,6 +853,7 @@ async function classifyMessage(text) {
     renderClassification(data.label);
     await save({ type: "classification", content: data.label });
     if (data.label === "Create Workout") await runCreateWorkout(text, save);
+    if (data.label === "Give Workout Advice") await runGiveWorkoutAdvice(text, save);
   } catch (err) {
     renderClassification("Unclassified");
     await save({ type: "classification", content: "Unclassified" });
@@ -831,6 +898,40 @@ async function runCreateWorkout(text, save) {
     loadWorkout();
   } catch (err) {
     pending.textContent = `I couldn't generate your workout: ${err.message}`;
+    pending.classList.remove("chat-pending");
+    save({ role: "assistant", content: pending.textContent }).catch(() => {});
+  }
+}
+
+function isAdviceSession() {
+  return Boolean(
+    currentSession?.messages.some(
+      (message) => message.type === "classification" && message.content === "Give Workout Advice"
+    )
+  );
+}
+
+async function runGiveWorkoutAdvice(text, save) {
+  const pending = renderMessage("assistant", "Thinking about your question...");
+  pending.classList.add("chat-pending");
+  try {
+    const res = await fetch(WORKOUT_ADVICE_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, sessionId: currentSession?.id }),
+    });
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error(`Advice service returned an unexpected response (${res.status})`);
+    }
+    if (!res.ok) throw new Error(data.error || `Workout advice failed (${res.status})`);
+    pending.replaceChildren(renderMarkdown(data.reply));
+    pending.classList.remove("chat-pending");
+    save({ role: "assistant", content: data.reply }).catch(() => {});
+  } catch (err) {
+    pending.textContent = `I couldn't give you advice: ${err.message}`;
     pending.classList.remove("chat-pending");
     save({ role: "assistant", content: pending.textContent }).catch(() => {});
   }
