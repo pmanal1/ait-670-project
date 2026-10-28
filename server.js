@@ -44,6 +44,17 @@ function writeSession(session) {
   );
 }
 
+// Serialize read-modify-write mutations per session so concurrent message
+// saves don't clobber each other (last write would otherwise win).
+const sessionLocks = new Map();
+
+function withSessionLock(id, fn) {
+  const prev = (sessionLocks.get(id) || Promise.resolve()).catch(() => {});
+  const next = prev.then(fn);
+  sessionLocks.set(id, next.catch(() => {}));
+  return next;
+}
+
 function listSessions() {
   return fs
     .readdirSync(SESSIONS_DIR)
@@ -254,6 +265,7 @@ function readJsonFile(relPath) {
 }
 
 const WORKOUT_FILE = path.join(__dirname, "data", "workout.json");
+const PENDING_WORKOUT_FILE = path.join(__dirname, "data", "workout.pending.json");
 
 function buildWorkoutPrompt() {
   return `You are SpotMe, an AI workout coach. Generate a workout plan from the request below.
@@ -291,7 +303,7 @@ function parseModelJson(content) {
   return JSON.parse(raw.slice(start, end + 1));
 }
 
-function sanitizeGeneratedWorkout(parsed, catalog) {
+function sanitizeGeneratedWorkout(parsed, catalog, baseWorkout) {
   const byId = new Map(catalog.map((ex) => [ex.id, ex]));
   const byName = new Map(catalog.map((ex) => [ex.name.toLowerCase(), ex]));
 
@@ -322,9 +334,9 @@ function sanitizeGeneratedWorkout(parsed, catalog) {
   }
 
   return {
-    id: `workout-${Date.now()}`,
-    name: typeof parsed.name === "string" && parsed.name.trim() ? parsed.name.trim() : "Generated Workout",
-    date: new Date().toISOString().slice(0, 10),
+    id: baseWorkout?.id || `workout-${Date.now()}`,
+    name: typeof parsed.name === "string" && parsed.name.trim() ? parsed.name.trim() : baseWorkout?.name || "Generated Workout",
+    date: baseWorkout?.date || new Date().toISOString().slice(0, 10),
     exercises,
   };
 }
@@ -389,6 +401,100 @@ async function handleCreateWorkout(req, res) {
   }
 }
 
+// Modify Workout: send the classified prompt, the current workout, the user's
+// profile and the exercise catalog to GLM-5.3-Flash (OpenCode Go). The model
+// returns the full modified plan, which is written to data/workout.pending.json
+// and shown to the user for confirmation. On confirm the pending file replaces
+// data/workout.json; on reject the client re-runs this with the feedback.
+function buildModifyWorkoutPrompt() {
+  return `You are SpotMe, an AI workout coach. Modify the user's current workout plan according to the request and feedback below.
+
+Respond with ONLY a JSON object (no markdown fences, no commentary) matching exactly this schema:
+
+{
+  "name": "short workout name",
+  "exercises": [
+    {
+      "id": "catalog exercise id, copied verbatim",
+      "name": "catalog exercise name, copied verbatim",
+      "custom": false,
+      "exerciseType": "catalog exerciseType, copied verbatim",
+      "sets": [
+        { "weight": -1, "reps": -1, "complete": false, "rir": "RIR 1" }
+      ]
+    }
+  ]
+}
+
+Rules:
+- Return the COMPLETE modified workout, including every exercise you keep unchanged. Do not omit exercises.
+- Apply the requested changes: add, remove, swap or restructure exercises/sets as asked.
+- For exercises you keep unchanged, preserve their set counts and rir strings exactly as in the current workout.
+- Only pick exercises from the exercise catalog. Copy id, name and exerciseType exactly as written there.
+- Output ONLY the keys above. Never include instructions, videos, url, difficulty, muscleGroup, secondaryMuscleGroups or any other keys.
+- Each set stays a placeholder: weight -1, reps -1, complete false.
+- If feedback from a previous rejection is provided, incorporate it fully into the new version.`;
+}
+
+async function handleModifyWorkout(req, res) {
+  const { text, feedback } = await readBody(req);
+  if (!text || !text.trim()) {
+    return sendJson(res, 400, { error: "text is required" });
+  }
+  const currentWorkout = readJsonFile("data/workout.json");
+  if (!currentWorkout || !Array.isArray(currentWorkout.exercises)) {
+    return sendJson(res, 400, { error: "No current workout to modify" });
+  }
+  const user = readJsonFile("data/user.json");
+  const catalog = (readJsonFile("data/exercises.json") || []).map((ex) => ({
+    id: ex.id,
+    name: ex.name,
+    exerciseType: ex.exerciseType,
+    muscleGroup: ex.muscleGroup,
+  }));
+  if (!catalog.length) {
+    return sendJson(res, 500, { error: "Exercise catalog is unavailable" });
+  }
+
+  const currentForModel = currentWorkout.exercises.map((ex) => ({
+    id: ex.id,
+    name: ex.name,
+    exerciseType: ex.exerciseType,
+    sets: (ex.sets || []).map((s) => ({ rir: s.rir })),
+  }));
+  const userContent = `User profile:\n${JSON.stringify(user, null, 2)}\n\nExercise catalog (JSON):\n${JSON.stringify(catalog)}\n\nCurrent workout (JSON):\n${JSON.stringify(currentForModel)}\n\nModification request:\n${text.trim()}`;
+  const feedbackText = typeof feedback === "string" ? feedback.trim() : "";
+  const fullContent = feedbackText
+    ? `${userContent}\n\nThe user rejected the previous proposed version with this feedback:\n${feedbackText}\n\nProduce a new version that addresses the feedback.`
+    : userContent;
+
+  try {
+    const content = await callGo(
+      [
+        { role: "system", content: buildModifyWorkoutPrompt() },
+        { role: "user", content: fullContent },
+      ],
+      4000,
+      "spotme-modify-workout"
+    );
+    const workout = sanitizeGeneratedWorkout(
+      parseModelJson(content),
+      catalog,
+      currentWorkout
+    );
+    fs.writeFileSync(PENDING_WORKOUT_FILE, JSON.stringify(workout, null, 2) + "\n");
+    console.log(`Wrote proposed workout to data/workout.pending.json (${workout.exercises.length} exercises)`);
+    sendJson(res, 200, {
+      workout,
+      pendingFile: "data/workout.pending.json",
+      feedbackApplied: Boolean(feedbackText),
+    });
+  } catch (err) {
+    console.error("Workout modification failed:", err.message);
+    sendJson(res, 502, { error: err.message });
+  }
+}
+
 // Give Workout Advice: send the whole session context (all prior user and
 // assistant messages, plus the new prompt) to GLM-5.3-Flash (OpenCode Go) and
 // return concise workout advice.
@@ -433,6 +539,30 @@ async function handleGiveWorkoutAdvice(req, res) {
   }
 }
 
+function handleConfirmWorkout(res) {
+  const pending = readJsonFile("data/workout.pending.json");
+  if (!pending || !Array.isArray(pending.exercises)) {
+    return sendJson(res, 404, { error: "No pending workout to confirm" });
+  }
+  fs.writeFileSync(WORKOUT_FILE, JSON.stringify(pending, null, 2) + "\n");
+  fs.rmSync(PENDING_WORKOUT_FILE, { force: true });
+  console.log("Confirmed workout: data/workout.pending.json replaced data/workout.json");
+  sendJson(res, 200, { workout: pending, savedTo: "data/workout.json" });
+}
+
+function handleDiscardWorkout(res) {
+  fs.rmSync(PENDING_WORKOUT_FILE, { force: true });
+  sendJson(res, 200, { ok: true });
+}
+
+function handleGetPendingWorkout(res) {
+  const pending = readJsonFile("data/workout.pending.json");
+  if (!pending || !Array.isArray(pending.exercises)) {
+    return sendJson(res, 404, { error: "No pending workout" });
+  }
+  sendJson(res, 200, { workout: pending });
+}
+
 // Chat session endpoints
 async function handleCreateSession(req, res) {
   const { title } = await readBody(req);
@@ -449,41 +579,83 @@ async function handleCreateSession(req, res) {
 }
 
 async function handleAppendMessage(req, res, sessionId) {
+  const body = await readBody(req);
+  return withSessionLock(sessionId, () => appendMessageLocked(res, sessionId, body));
+}
+
+function appendMessageLocked(res, sessionId, { role, type, content, workout, request, status }) {
   const session = readSession(sessionId);
   if (!session) {
     return sendJson(res, 404, { error: "Session not found" });
   }
-  const { role, type, content } = await readBody(req);
   if (typeof content !== "string" || !content.trim()) {
     return sendJson(res, 400, { error: "content is required" });
   }
   if (role && !["user", "assistant"].includes(role)) {
     return sendJson(res, 400, { error: "Invalid role" });
   }
+  if (status && !["pending", "confirmed", "rejected"].includes(status)) {
+    return sendJson(res, 400, { error: "Invalid status" });
+  }
   const message = { content: content.trim(), createdAt: new Date().toISOString() };
   if (role) message.role = role;
   if (type) message.type = type;
+  if (status) message.status = status;
+  if (typeof request === "string" && request.trim()) message.request = request.trim();
+  if (workout && typeof workout === "object" && Array.isArray(workout.exercises)) {
+    message.workout = workout;
+  }
   session.messages.push(message);
   session.updatedAt = message.createdAt;
   writeSession(session);
-  sendJson(res, 200, message);
+  sendJson(res, 200, { ...message, index: session.messages.length - 1 });
+}
+
+const MESSAGE_STATUSES = ["pending", "confirmed", "rejected"];
+
+async function handleUpdateMessage(req, res, sessionId, index) {
+  const body = await readBody(req);
+  return withSessionLock(sessionId, () => updateMessageLocked(res, sessionId, index, body));
+}
+
+function updateMessageLocked(res, sessionId, index, { status }) {
+  const session = readSession(sessionId);
+  if (!session) {
+    return sendJson(res, 404, { error: "Session not found" });
+  }
+  if (!Number.isInteger(index) || index < 0 || index >= session.messages.length) {
+    return sendJson(res, 404, { error: "Message not found" });
+  }
+  if (!MESSAGE_STATUSES.includes(status)) {
+    return sendJson(res, 400, { error: "Invalid status" });
+  }
+  session.messages[index].status = status;
+  session.updatedAt = new Date().toISOString();
+  writeSession(session);
+  sendJson(res, 200, { ok: true, index, status });
 }
 
 function handleDeleteSession(res, sessionId) {
-  const session = readSession(sessionId);
-  if (!session) {
-    return sendJson(res, 404, { error: "Session not found" });
-  }
-  fs.unlinkSync(path.join(SESSIONS_DIR, `${sessionId}.json`));
-  sendJson(res, 200, { ok: true });
+  return withSessionLock(sessionId, () => {
+    const session = readSession(sessionId);
+    if (!session) {
+      return sendJson(res, 404, { error: "Session not found" });
+    }
+    fs.unlinkSync(path.join(SESSIONS_DIR, `${sessionId}.json`));
+    sendJson(res, 200, { ok: true });
+  });
 }
 
 async function handleRenameSession(req, res, sessionId) {
+  const body = await readBody(req);
+  return withSessionLock(sessionId, () => renameSessionLocked(res, sessionId, body));
+}
+
+function renameSessionLocked(res, sessionId, { title }) {
   const session = readSession(sessionId);
   if (!session) {
     return sendJson(res, 404, { error: "Session not found" });
   }
-  const { title } = await readBody(req);
   if (typeof title !== "string" || !title.trim()) {
     return sendJson(res, 400, { error: "title is required" });
   }
@@ -507,12 +679,20 @@ function serveStatic(req, res, pathname) {
 const server = http.createServer(async (req, res) => {
   const pathname = new URL(req.url, `http://${req.headers.host}`).pathname;
   const sessionMatch = pathname.match(/^\/api\/sessions\/(\d+)\/messages$/) || pathname.match(/^\/api\/sessions\/(\d+)$/);
+  const messageMatch = pathname.match(/^\/api\/sessions\/(\d+)\/messages\/(\d+)$/);
   try {
     if (req.method === "POST" && pathname === "/api/classify") return await handleClassify(req, res);
     if (req.method === "POST" && pathname === "/api/create-workout") return await handleCreateWorkout(req, res);
+    if (req.method === "POST" && pathname === "/api/modify-workout") return await handleModifyWorkout(req, res);
+    if (req.method === "POST" && pathname === "/api/confirm-workout") return handleConfirmWorkout(res);
+    if (req.method === "DELETE" && pathname === "/api/confirm-workout") return handleDiscardWorkout(res);
+    if (req.method === "GET" && pathname === "/api/pending-workout") return handleGetPendingWorkout(res);
     if (req.method === "POST" && pathname === "/api/give-workout-advice") return await handleGiveWorkoutAdvice(req, res);
     if (req.method === "GET" && pathname === "/api/sessions") return sendJson(res, 200, { sessions: listSessions() });
     if (req.method === "POST" && pathname === "/api/sessions") return await handleCreateSession(req, res);
+    if (req.method === "PATCH" && messageMatch) {
+      return await handleUpdateMessage(req, res, messageMatch[1], Number(messageMatch[2]));
+    }
     if (req.method === "DELETE" && !pathname.endsWith("/messages") && pathname.startsWith("/api/sessions/")) {
       return handleDeleteSession(res, pathname.split("/")[3]);
     }
