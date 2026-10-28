@@ -7,9 +7,12 @@ const chatMessages = document.getElementById("chat-messages");
 const chatEmptyState = document.getElementById("chat-empty-state");
 const chatSessionList = document.getElementById("chat-session-list");
 const newSessionBtn = document.getElementById("new-session-btn");
+const chatSendBtn = document.getElementById("chat-send-btn");
 
 const CLASSIFY_API_URL = "/api/classify";
 const CREATE_WORKOUT_API_URL = "/api/create-workout";
+const MODIFY_WORKOUT_API_URL = "/api/modify-workout";
+const CONFIRM_WORKOUT_API_URL = "/api/confirm-workout";
 const SESSIONS_API_URL = "/api/sessions";
 
 let currentSession = null;
@@ -604,7 +607,7 @@ async function switchSession(id) {
   }
 }
 
-function renderSession(session) {
+async function renderSession(session) {
   chatMessages.innerHTML = "";
   if (session.messages.length) {
     chatEmptyState.style.display = "none";
@@ -612,11 +615,44 @@ function renderSession(session) {
     chatEmptyState.style.display = "";
     chatMessages.appendChild(chatEmptyState);
   }
-  session.messages.forEach((message) => {
+  const pendingData = await fetchPendingWorkout();
+  const feedbackAfter = new Set();
+  let lastProposalIndex = null;
+  session.messages.forEach((message, index) => {
+    if (message.type === "proposal" && message.workout) lastProposalIndex = index;
+    else if (message.role === "user" && lastProposalIndex != null) {
+      feedbackAfter.add(lastProposalIndex);
+    }
+  });
+  session.messages.forEach((message, index) => {
     if (message.type === "classification") renderClassification(message.content);
-    else renderMessage(message.role, message.content);
+    else if (message.type === "proposal" && message.workout) {
+      let status = message.status || "pending";
+      if (status === "pending" && pendingData?.workout?.id !== message.workout.id) {
+        status = "completed";
+      }
+      if (status === "pending" && feedbackAfter.has(index)) {
+        status = "completed";
+      }
+      renderWorkoutProposal(
+        message.request || "Modify workout",
+        null,
+        message.workout,
+        { index, status }
+      );
+    } else renderMessage(message.role, message.content);
   });
   chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+async function fetchPendingWorkout() {
+  try {
+    const res = await fetch("/api/pending-workout");
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
 }
 
 async function createSession(title) {
@@ -636,6 +672,7 @@ async function appendSessionMessage(sessionId, message) {
     body: JSON.stringify(message),
   });
   if (!res.ok) throw new Error(`Failed to save message (${res.status})`);
+  return res.json();
 }
 
 const SUGGESTIONS = [
@@ -774,10 +811,16 @@ async function classifyMessage(text) {
     renderClassification(data.label);
     await save({ type: "classification", content: data.label });
     if (data.label === "Create Workout") await runCreateWorkout(text, save);
+    if (data.label === "Modify Workout") await runModifyWorkout(text, save);
   } catch (err) {
     renderClassification("Unclassified");
     await save({ type: "classification", content: "Unclassified" });
   }
+}
+
+function setChatBusy(busy) {
+  chatInput.disabled = busy;
+  chatSendBtn.disabled = busy;
 }
 
 async function runCreateWorkout(text, save) {
@@ -821,4 +864,211 @@ async function runCreateWorkout(text, save) {
     pending.classList.remove("chat-pending");
     save({ role: "assistant", content: pending.textContent }).catch(() => {});
   }
+}
+
+async function runModifyWorkout(requestText, save, feedback) {
+  save = save || (() => Promise.resolve());
+  const pending = renderMessage(
+    "assistant",
+    feedback
+      ? "Revising your workout based on your feedback..."
+      : "Updating your workout based on your request..."
+  );
+  pending.classList.add("chat-pending");
+  try {
+    const res = await fetch(MODIFY_WORKOUT_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: requestText, feedback, sessionId: currentSession?.id }),
+    });
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error(`Workout service returned an unexpected response (${res.status})`);
+    }
+    if (!res.ok) throw new Error(data.error || `Workout modification failed (${res.status})`);
+    pending.textContent = feedback
+      ? "Here is the revised version:"
+      : "Here is the proposed change to your workout:";
+    pending.classList.remove("chat-pending");
+    await save({ role: "assistant", content: pending.textContent });
+    renderWorkoutProposal(requestText, save, data.workout);
+  } catch (err) {
+    pending.textContent = `I couldn't modify your workout: ${err.message}`;
+    pending.classList.remove("chat-pending");
+    save({ role: "assistant", content: pending.textContent }).catch(() => {});
+  }
+}
+
+function renderWorkoutProposal(requestText, save, proposal, existing) {
+  const messageIndex = existing?.index ?? null;
+  const status = existing?.status || (existing ? "pending" : null);
+  const isReplay = Boolean(existing);
+  const actionable = !status || status === "pending";
+
+  const summary = `Proposed workout: ${proposal.name} (${proposal.exercises.length} exercises)`;
+  const card = document.createElement("div");
+  card.classList.add("chat-proposal-card");
+
+  const title = document.createElement("div");
+  title.classList.add("chat-proposal-title");
+  title.textContent = summary;
+  card.appendChild(title);
+
+  if (status === "confirmed" || status === "rejected" || status === "completed") {
+    const chip = document.createElement("span");
+    chip.classList.add("chat-proposal-status");
+    chip.textContent =
+      status === "confirmed" ? "Confirmed" : status === "rejected" ? "Rejected" : "Completed";
+    card.appendChild(chip);
+  }
+
+  const list = document.createElement("ul");
+  list.classList.add("chat-proposal-list");
+  proposal.exercises.forEach((exercise) => {
+    const item = document.createElement("li");
+    item.textContent = `${exercise.name} — ${exercise.sets.length} set${exercise.sets.length === 1 ? "" : "s"}`;
+    list.appendChild(item);
+  });
+  card.appendChild(list);
+
+  const jsonDetails = document.createElement("details");
+  jsonDetails.classList.add("chat-proposal-json");
+  const jsonSummary = document.createElement("summary");
+  jsonSummary.textContent = "View proposed workout.json";
+  const jsonPre = document.createElement("pre");
+  jsonPre.textContent = JSON.stringify(proposal, null, 2);
+  jsonDetails.append(jsonSummary, jsonPre);
+  card.appendChild(jsonDetails);
+
+  if (actionable) {
+    const actions = document.createElement("div");
+    actions.classList.add("chat-proposal-actions");
+
+    const confirmBtn = document.createElement("button");
+    confirmBtn.type = "button";
+    confirmBtn.classList.add("chat-proposal-confirm");
+    confirmBtn.textContent = "Confirm";
+
+    const rejectBtn = document.createElement("button");
+    rejectBtn.type = "button";
+    rejectBtn.classList.add("chat-proposal-reject");
+    rejectBtn.textContent = "Reject";
+
+    confirmBtn.addEventListener("click", () => confirmWorkoutProposal(card, save, proposal, requestText, messageIndex));
+    rejectBtn.addEventListener("click", () => {
+      actions.remove();
+      card.appendChild(renderFeedbackForm(requestText, save, messageIndex));
+    });
+
+    actions.append(confirmBtn, rejectBtn);
+    card.appendChild(actions);
+  }
+
+  chatMessages.appendChild(card);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+  if (actionable) setChatBusy(true);
+
+  if (!isReplay && currentSession) {
+    appendSessionMessage(currentSession.id, {
+      type: "proposal",
+      content: summary,
+      workout: proposal,
+      request: requestText,
+      status: "pending",
+    }).catch(() => {});
+  }
+}
+
+async function updateProposalStatus(messageIndex, status) {
+  if (messageIndex == null || !currentSession) return;
+  try {
+    await fetch(`${SESSIONS_API_URL}/${currentSession.id}/messages/${messageIndex}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+  } catch {
+    // leave the stored status as-is if the update fails
+  }
+}
+
+async function confirmWorkoutProposal(card, save, proposal, requestText, messageIndex) {
+  save = save || (() => Promise.resolve());
+  card.querySelectorAll(".chat-proposal-actions, .chat-feedback-form").forEach((el) => el.remove());
+  const pending = renderMessage("assistant", "Saving your updated workout...");
+  pending.classList.add("chat-pending");
+  try {
+    const res = await fetch(CONFIRM_WORKOUT_API_URL, { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Failed to save workout (${res.status})`);
+    pending.textContent = `Done! Your workout "${data.workout.name}" has been updated.`;
+    pending.classList.remove("chat-pending");
+    setChatBusy(false);
+    await save({ role: "assistant", content: pending.textContent });
+    await updateProposalStatus(messageIndex, "confirmed");
+
+    const link = document.createElement("a");
+    link.href = "#";
+    link.classList.add("chat-workout-link");
+    link.textContent = "View your workout";
+    link.addEventListener("click", (e) => {
+      e.preventDefault();
+      loadWorkout();
+      switchToWorkoutView();
+    });
+    chatMessages.appendChild(link);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    loadWorkout();
+  } catch (err) {
+    pending.textContent = `I couldn't save your workout: ${err.message}`;
+    pending.classList.remove("chat-pending");
+    save({ role: "assistant", content: pending.textContent }).catch(() => {});
+    renderWorkoutProposal(requestText, save, proposal);
+  }
+}
+
+function renderFeedbackForm(requestText, save, messageIndex) {
+  setChatBusy(true);
+  const form = document.createElement("div");
+  form.classList.add("chat-feedback-form");
+
+  const label = document.createElement("p");
+  label.classList.add("chat-feedback-label");
+  label.textContent = "What should be different in the next version?";
+  form.appendChild(label);
+
+  const textarea = document.createElement("textarea");
+  textarea.classList.add("chat-feedback-input");
+  textarea.rows = 2;
+  textarea.placeholder = "e.g. Keep the deadlifts and only swap the bench press";
+  form.appendChild(textarea);
+
+  const sendBtn = document.createElement("button");
+  sendBtn.type = "button";
+  sendBtn.classList.add("chat-proposal-confirm");
+  sendBtn.textContent = "Send feedback";
+
+  sendBtn.addEventListener("click", () => {
+    const feedbackText = textarea.value.trim();
+    if (!feedbackText) {
+      textarea.focus();
+      return;
+    }
+    form.remove();
+    setChatBusy(false);
+    renderMessage("user", feedbackText);
+    if (currentSession) {
+      appendSessionMessage(currentSession.id, { role: "user", content: feedbackText }).catch(() => {});
+    }
+    updateProposalStatus(messageIndex, "rejected");
+    runModifyWorkout(requestText, save, feedbackText);
+  });
+
+  form.appendChild(sendBtn);
+  chatMessages.appendChild(form);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+  textarea.focus();
+  return form;
 }
