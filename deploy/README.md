@@ -53,11 +53,15 @@ it through another proxy, tunnel, container mapping, or port forward.
   credentials receive `401` before the request reaches Node.
 - Each client IP gets an average of 5 requests/second with a burst allowance
   of 20 excess requests. This also slows repeated password guesses.
-- The four paid AI routes share one site-wide budget of 12 requests/minute,
-  with a burst allowance of 4 excess requests. One prompt may call both
-  classification and another AI endpoint. Excess traffic receives `429`.
-  Changing query strings, route encoding, or client IP cannot create another
-  AI budget. This is a request limit, not a monetary spending cap.
+- After Nginx authenticates a request, the Node process applies one shared
+  budget to POST requests dispatched to the four paid AI handlers. It refills
+  at 12 requests/minute and allows five immediate requests (one plus four
+  excess in a burst). Excess requests receive `429` and `Retry-After` seconds.
+  Anonymous requests, incorrect passwords, and non-POST methods cannot use
+  this allowance. One prompt may call both classification and another AI
+  endpoint. The app uses the same parsed path for limiting and dispatch, so
+  backslash variants, dot segments, query strings, and changes of client IP
+  cannot bypass the budget. This is a request limit, not a spending cap.
 - Browser writes from a different origin are rejected with `403`, because
   browsers may automatically reuse cached Basic credentials. Origin-less
   API clients still need the password.
@@ -67,6 +71,10 @@ it through another proxy, tunnel, container mapping, or port forward.
 The limits use Nginx's actual peer address. Do not trust arbitrary
 `X-Forwarded-For` headers. If a trusted CDN or another proxy is added later,
 configure its real-IP handling explicitly and recheck the client limit.
+
+The AI allowance is held in memory in the single Node process; restarting it
+refills the burst. Keep one app process for this deployment. Multiple app
+processes would need a shared budget store.
 
 ## Verify and change the password
 
@@ -86,8 +94,8 @@ Nginx reads the password file on requests; changing it does not require an app
 restart. Basic Authentication has no application logout button; browsers may
 retain the login until the browser session ends.
 
-Authentication does not rotate previously exposed provider keys or fix the
-separate malformed-URL crash issue. Set a provider spending cap where supported.
+Authentication does not rotate previously exposed provider keys. Set a provider
+spending cap where supported.
 
 References: [Nginx Basic Authentication](https://nginx.org/en/docs/http/ngx_http_auth_basic_module.html)
 and [request limiting](https://nginx.org/en/docs/http/ngx_http_limit_req_module.html).

@@ -687,6 +687,31 @@ function serveStatic(req, res, pathname) {
   fs.createReadStream(filePath).pipe(res);
 }
 
+const AI_HANDLERS = new Map([
+  ["/api/classify", handleClassify],
+  ["/api/create-workout", handleCreateWorkout],
+  ["/api/modify-workout", handleModifyWorkout],
+  ["/api/give-workout-advice", handleGiveWorkoutAdvice],
+]);
+
+// The sole upstream process is trusted only on loopback, behind Nginx's login.
+// Enforce the shared paid-request budget here, after proxy authentication,
+// using the very same parsed pathname and method that select the handler.
+// Refill at 12 requests/minute; allow one request plus four excess in a burst.
+const AI_BURST_CAPACITY = 5;
+const AI_REFILL_MS = 5000;
+let aiTokens = AI_BURST_CAPACITY;
+let aiRefilledAt = performance.now();
+
+function consumeAiBudget() {
+  const now = performance.now();
+  aiTokens = Math.min(AI_BURST_CAPACITY, aiTokens + (now - aiRefilledAt) / AI_REFILL_MS);
+  aiRefilledAt = now;
+  if (aiTokens < 1) return Math.ceil((1 - aiTokens) * AI_REFILL_MS / 1000);
+  aiTokens -= 1;
+  return 0;
+}
+
 const server = http.createServer(async (req, res) => {
   let pathname;
   try {
@@ -698,13 +723,18 @@ const server = http.createServer(async (req, res) => {
   try {
     const sessionMatch = pathname.match(/^\/api\/sessions\/(\d+)\/messages$/) || pathname.match(/^\/api\/sessions\/(\d+)$/);
     const messageMatch = pathname.match(/^\/api\/sessions\/(\d+)\/messages\/(\d+)$/);
-    if (req.method === "POST" && pathname === "/api/classify") return await handleClassify(req, res);
-    if (req.method === "POST" && pathname === "/api/create-workout") return await handleCreateWorkout(req, res);
-    if (req.method === "POST" && pathname === "/api/modify-workout") return await handleModifyWorkout(req, res);
+    const aiHandler = req.method === "POST" && AI_HANDLERS.get(pathname);
+    if (aiHandler) {
+      const retryAfter = consumeAiBudget();
+      if (retryAfter) {
+        res.setHeader("Retry-After", String(retryAfter));
+        return sendJson(res, 429, { error: "Too many AI requests. Try again shortly." });
+      }
+      return await aiHandler(req, res);
+    }
     if (req.method === "POST" && pathname === "/api/confirm-workout") return handleConfirmWorkout(res);
     if (req.method === "DELETE" && pathname === "/api/confirm-workout") return handleDiscardWorkout(res);
     if (req.method === "GET" && pathname === "/api/pending-workout") return handleGetPendingWorkout(res);
-    if (req.method === "POST" && pathname === "/api/give-workout-advice") return await handleGiveWorkoutAdvice(req, res);
     if (req.method === "GET" && pathname === "/api/sessions") return sendJson(res, 200, { sessions: listSessions() });
     if (req.method === "POST" && pathname === "/api/sessions") return await handleCreateSession(req, res);
     if (req.method === "PATCH" && messageMatch) {

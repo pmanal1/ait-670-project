@@ -1,5 +1,5 @@
 const assert = require("node:assert/strict");
-const { execFileSync, spawn } = require("node:child_process");
+const { execFileSync, fork, spawn } = require("node:child_process");
 const { once } = require("node:events");
 const fs = require("node:fs/promises");
 const http = require("node:http");
@@ -22,15 +22,16 @@ async function freePort() {
   return port;
 }
 
-function request(port, route, { method = "GET", auth, origin, forwarded, secure = true } = {}) {
+function request(port, route, { method = "GET", auth, origin, forwarded, secure = true, body, clientAddress } = {}) {
   return new Promise((resolve, reject) => {
     const headers = {};
     if (auth) headers.Authorization = auth;
     if (origin) headers.Origin = origin;
     if (forwarded) headers["X-Forwarded-For"] = forwarded;
+    if (body) headers["Content-Type"] = "application/json";
     const req = (secure ? https : http).request({
       hostname: "127.0.0.1", port, path: route, method, headers,
-      rejectUnauthorized: false, agent: false,
+      rejectUnauthorized: false, agent: false, localAddress: clientAddress,
     }, (res) => {
       let body = "";
       res.setEncoding("utf8");
@@ -40,15 +41,29 @@ function request(port, route, { method = "GET", auth, origin, forwarded, secure 
     });
     req.on("error", reject);
     req.setTimeout(3000, () => req.destroy(new Error("Request timed out")));
-    req.end();
+    req.end(body && JSON.stringify(body));
   });
 }
 
-async function fixture(t) {
+async function fixture(t, { realApp = false } = {}) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "spotme-nginx-test-"));
   const received = [];
+  let app;
+  let appPort;
   const upstream = http.createServer((req, res) => {
     received.push({ method: req.method, url: req.url, authorization: req.headers.authorization });
+    if (realApp) {
+      const forwarded = http.request({
+        hostname: "127.0.0.1", port: appPort, path: req.url,
+        method: req.method, headers: req.headers,
+      }, (response) => {
+        res.writeHead(response.statusCode, response.headers);
+        response.pipe(res);
+      });
+      forwarded.on("error", (error) => res.destroy(error));
+      req.pipe(forwarded);
+      return;
+    }
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end('{"ok":true}');
   });
@@ -60,8 +75,47 @@ async function fixture(t) {
       await exited;
     }
     await new Promise((resolve) => upstream.close(resolve));
+    if (app && app.exitCode === null && app.signalCode === null) {
+      const exited = once(app, "exit");
+      app.kill();
+      await exited;
+    }
     await fs.rm(directory, { recursive: true, force: true });
   });
+  if (realApp) {
+    await fs.copyFile(path.join(__dirname, "..", "server.js"), path.join(directory, "server.js"));
+    await fs.mkdir(path.join(directory, "data"));
+    await fs.writeFile(path.join(directory, ".env"), "OPENCODE_API_KEY=DUMMY\nOPENCODE_GO_API_KEY=DUMMY\n");
+    await fs.writeFile(path.join(directory, "data", "user.json"), "{}");
+    await fs.writeFile(path.join(directory, "data", "workout.json"), '{"exercises":[]}');
+    await fs.writeFile(path.join(directory, "data", "exercises.json"), '[{"id":"squat","name":"Squat"}]');
+    await fs.writeFile(path.join(directory, "provider-calls"), "");
+    await fs.writeFile(path.join(directory, "bootstrap.js"), `
+      const fs = require("node:fs");
+      const path = require("node:path");
+      const http = require("node:http");
+      // Block all external provider traffic and record attempted paid work.
+      global.fetch = async () => {
+        fs.appendFileSync(path.join(__dirname, "provider-calls"), "call\\n");
+        return new Response('{"error":{"message":"mock provider unavailable"}}', { status: 503 });
+      };
+      const listen = http.Server.prototype.listen;
+      http.Server.prototype.listen = function (...args) {
+        this.once("listening", () => process.send(this.address().port));
+        return listen.apply(this, args);
+      };
+      require("./server.js");
+    `);
+    app = fork(path.join(directory, "bootstrap.js"), [], {
+      silent: true, env: { ...process.env, PORT: "0" },
+    });
+    appPort = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("Fixture app did not start")), 5000);
+      app.once("error", reject);
+      app.once("exit", () => reject(new Error("Fixture app exited before startup")));
+      app.once("message", (port) => { clearTimeout(timer); resolve(port); });
+    });
+  }
   upstream.listen(0, "127.0.0.1");
   await once(upstream, "listening");
   const httpPort = await freePort();
@@ -120,7 +174,10 @@ async function fixture(t) {
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
   }
-  return { httpPort, httpsPort, received };
+  return {
+    httpPort, httpsPort, received,
+    providerCalls: async () => (await fs.readFile(path.join(directory, "provider-calls"), "utf8")).split("\n").length - 1,
+  };
 }
 
 test("Nginx private access", { skip: !nginx && "Set NGINX_BIN to run Nginx integration tests" }, async (t) => {
@@ -168,22 +225,59 @@ test("Nginx private access", { skip: !nginx && "Set NGINX_BIN to run Nginx integ
     assert.ok(received.every((req) => req.authorization === undefined));
   });
 
-  await t.test("AI endpoints share a rate limit across routes and query strings", async (t) => {
-    const { httpsPort, received } = await fixture(t);
-    for (const route of aiRoutes) {
-      assert.equal((await request(httpsPort, `/api/${route}`, {
-        method: "POST", auth: authorization,
-      })).status, 200);
+  await t.test("anonymous/wrong logins and non-POST requests cannot exhaust the AI budget", async (t) => {
+    const { httpsPort, providerCalls } = await fixture(t, { realApp: true });
+    const wrong = `Basic ${Buffer.from("paulo:wrong").toString("base64")}`;
+    for (const auth of [undefined, wrong]) {
+      for (const route of aiRoutes) {
+        assert.equal((await request(httpsPort, `/api/${route}`, {
+          method: "POST", auth, body: { text: "test" }, clientAddress: "127.0.0.2",
+        })).status, 401);
+      }
     }
-    const statuses = [];
+    for (const method of ["GET", "HEAD", "OPTIONS"]) {
+      for (const route of aiRoutes) {
+        assert.equal((await request(httpsPort, `/api/${route}`, {
+          method, auth: authorization, clientAddress: "127.0.0.3",
+        })).status, method === "GET" ? 404 : 405);
+      }
+    }
+    assert.equal(await providerCalls(), 0);
+    for (let i = 0; i < 5; i++) {
+      assert.equal((await request(httpsPort, `/api/${aiRoutes[i % 4]}?attempt=${i}`, {
+        method: "POST", auth: authorization, body: { text: "test" }, clientAddress: "127.0.0.4",
+      })).status, 502, "each authenticated request must still reach the mock provider");
+    }
+    const before = await providerCalls();
+    assert.ok(before >= 5);
+    const limited = await request(httpsPort, "/api/classify", {
+      method: "POST", auth: authorization, body: { text: "test" }, clientAddress: "127.0.0.5",
+    });
+    assert.equal(limited.status, 429, "authenticated clients share one budget across IPs");
+    assert.ok(Number(limited.headers["retry-after"]) > 0);
+    assert.equal(await providerCalls(), before);
+  });
+
+  await t.test("backslash routes and canonical routes share the application's AI budget", async (t) => {
+    const { httpsPort, providerCalls } = await fixture(t, { realApp: true });
+    const variants = [
+      ...aiRoutes.map((route) => `/api\\${route}`),
+      "/unused/../api\\classify?variant=dot-segment",
+    ];
+    for (const route of variants) {
+      assert.equal((await request(httpsPort, route, {
+        method: "POST", auth: authorization, body: { text: "test" },
+      })).status, 502, route);
+    }
+    const before = await providerCalls();
     for (let i = 0; i < 8; i++) {
-      statuses.push((await request(httpsPort, `/api/%63lassify?attempt=${i}`, {
-        method: "POST", auth: authorization,
-      })).status);
+      const route = i % 2 ? `/api\\${aiRoutes[i % 4]}?attempt=${i}` : `/api/${aiRoutes[i % 4]}?attempt=${i}`;
+      assert.equal((await request(httpsPort, route, {
+        method: "POST", auth: authorization, body: { text: "test" },
+      })).status, 429, route);
     }
-    assert.ok(statuses.includes(429), "changing route encoding/query must not bypass the budget");
-    assert.ok(received.length <= 6, "excess paid requests must not reach the upstream");
-    assert.equal((await request(httpsPort, "/", { auth: authorization })).status, 200);
+    assert.equal(await providerCalls(), before, "rejected requests must never call a provider");
+    assert.equal((await request(httpsPort, "/api/sessions", { auth: authorization })).status, 200);
   });
 
   await t.test("repeated password attempts are throttled despite spoofed forwarding headers", async (t) => {

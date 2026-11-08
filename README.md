@@ -53,8 +53,9 @@ HTTPS/authentication integration tests:
 NGINX_BIN=/usr/sbin/nginx node --test tests/*.test.js
 ```
 
-The Nginx tests use temporary ports, a mock app, and disposable credentials;
-they do not read or change the system Nginx configuration. Without `NGINX_BIN`,
+The Nginx tests use temporary ports and disposable credentials. AI-budget
+checks run the real app with dummy data and mocked providers; they never spend
+AI credits or read/change the system Nginx configuration. Without `NGINX_BIN`,
 those integration tests are explicitly skipped.
 
 Messages sent in the Coach view are classified by Jev (jev-1.13) into one
