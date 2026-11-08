@@ -40,9 +40,11 @@ the authenticated HTTPS proxy in [deploy/nginx/spotme.conf](deploy/nginx/spotme.
 See [deployment instructions](deploy/README.md) for the private login, rate
 limits, and password changes. Local access on the server itself is trusted.
 
-Run the static-file security regression tests with
-`node --test tests/static-files.test.js`. They use a disposable server and dummy
-secrets, without reading your `.env` or calling an AI provider.
+Run the security regression tests with `node --test tests/*.test.js`. They
+cover static-file restrictions and malformed request URLs/Host headers, including
+checking that the server keeps responding after rejecting invalid URL input.
+They use disposable servers and dummy secrets, without reading your `.env` or
+calling an AI provider.
 
 With Nginx and OpenSSL installed, run all checks, including the isolated
 HTTPS/authentication integration tests:
