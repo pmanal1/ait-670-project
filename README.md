@@ -30,6 +30,16 @@ ait-670-project/
 1. Fill in your keys in `.env` (see `.env.example`).
 2. Run `node server.js` and open http://localhost:5173.
 
+Static serving is restricted to an explicit `PUBLIC_FILES` allowlist in
+`server.js`: the page, stylesheet, browser script, profile JSON, and workout
+JSON. Add new public assets there explicitly; keep credentials, Git metadata,
+and raw session files outside that list. API authentication is still required
+before using this app with private data on the public internet.
+
+Run the static-file security regression tests with
+`node --test tests/static-files.test.js`. They use a disposable server and dummy
+secrets, without reading your `.env` or calling an AI provider.
+
 Messages sent in the Coach view are classified by Jev (jev-1.13) into one
 of: Create Workout, Modify Workout, Give Workout Advice, or Analyze Form, and
 the label is shown in the chat.

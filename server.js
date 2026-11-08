@@ -665,10 +665,21 @@ function renameSessionLocked(res, sessionId, { title }) {
   sendJson(res, 200, { ok: true });
 }
 
+// Only these files are public. Never resolve arbitrary request paths against
+// the project directory, which also contains API keys, Git metadata and chats.
+const PUBLIC_FILES = new Map([
+  ["/", "index.html"],
+  ["/index.html", "index.html"],
+  ["/styles.css", "styles.css"],
+  ["/script.js", "script.js"],
+  ["/data/user.json", "data/user.json"],
+  ["/data/workout.json", "data/workout.json"],
+]);
+
 function serveStatic(req, res, pathname) {
-  const file = pathname === "/" ? "/index.html" : pathname;
-  const filePath = path.join(__dirname, path.normalize(file));
-  if (!filePath.startsWith(__dirname) || !fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+  const file = PUBLIC_FILES.get(pathname);
+  const filePath = file && path.join(__dirname, file);
+  if (!filePath || !fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
     res.writeHead(404, { "Content-Type": "text/plain" });
     return res.end("Not found");
   }
