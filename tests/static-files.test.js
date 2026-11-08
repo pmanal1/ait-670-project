@@ -46,26 +46,31 @@ test("static serving exposes only the UI's public files", async (t) => {
     await fs.writeFile(file, content);
   }
   await fs.copyFile(path.join(__dirname, "..", "server.js"), path.join(directory, "server.js"));
-  // Bind the disposable server to loopback on a free port without changing app code.
+  // Use the app's real listen arguments to verify its network binding too.
   await fs.writeFile(path.join(directory, "bootstrap.js"), `
     const http = require("node:http");
     const listen = http.Server.prototype.listen;
-    http.Server.prototype.listen = function () {
-      this.once("listening", () => process.send(this.address().port));
-      return listen.call(this, 0, "127.0.0.1");
+    http.Server.prototype.listen = function (...args) {
+      this.once("listening", () => process.send(this.address()));
+      return listen.apply(this, args);
     };
     require("./server.js");
   `);
-  child = fork(path.join(directory, "bootstrap.js"), [], { silent: true });
-  const port = await new Promise((resolve, reject) => {
+  child = fork(path.join(directory, "bootstrap.js"), [], {
+    silent: true,
+    env: { ...process.env, PORT: "0" },
+  });
+  const address = await new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("Test server did not start")), 5000);
     child.once("error", reject);
     child.once("exit", () => reject(new Error("Test server exited before startup")));
-    child.once("message", (port) => {
+    child.once("message", (address) => {
       clearTimeout(timer);
-      resolve(port);
+      resolve(address);
     });
   });
+  assert.equal(address.address, "127.0.0.1", "upstream must be loopback-only");
+  const port = address.port;
 
   function get(route) {
     return new Promise((resolve, reject) => {
