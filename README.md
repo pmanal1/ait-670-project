@@ -33,12 +33,27 @@ ait-670-project/
 Static serving is restricted to an explicit `PUBLIC_FILES` allowlist in
 `server.js`: the page, stylesheet, browser script, profile JSON, and workout
 JSON. Add new public assets there explicitly; keep credentials, Git metadata,
-and raw session files outside that list. API authentication is still required
-before using this app with private data on the public internet.
+and raw session files outside that list.
+
+The Node server binds only to `127.0.0.1`. Public deployments must go through
+the authenticated HTTPS proxy in [deploy/nginx/spotme.conf](deploy/nginx/spotme.conf).
+See [deployment instructions](deploy/README.md) for the private login, rate
+limits, and password changes. Local access on the server itself is trusted.
 
 Run the static-file security regression tests with
 `node --test tests/static-files.test.js`. They use a disposable server and dummy
 secrets, without reading your `.env` or calling an AI provider.
+
+With Nginx and OpenSSL installed, run all checks, including the isolated
+HTTPS/authentication integration tests:
+
+```sh
+NGINX_BIN=/usr/sbin/nginx node --test tests/*.test.js
+```
+
+The Nginx tests use temporary ports, a mock app, and disposable credentials;
+they do not read or change the system Nginx configuration. Without `NGINX_BIN`,
+those integration tests are explicitly skipped.
 
 Messages sent in the Coach view are classified by Jev (jev-1.13) into one
 of: Create Workout, Modify Workout, Give Workout Advice, or Analyze Form, and

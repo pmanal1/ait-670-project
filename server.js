@@ -723,6 +723,8 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
+// Nginx handles public HTTPS and authentication. Never expose this upstream
+// directly on a network interface, where it would bypass that protection.
+server.listen(PORT, "127.0.0.1", () => {
   console.log(`SpotMe running at http://localhost:${PORT}`);
 });
