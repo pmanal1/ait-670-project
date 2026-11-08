@@ -688,10 +688,16 @@ function serveStatic(req, res, pathname) {
 }
 
 const server = http.createServer(async (req, res) => {
-  const pathname = new URL(req.url, `http://${req.headers.host}`).pathname;
-  const sessionMatch = pathname.match(/^\/api\/sessions\/(\d+)\/messages$/) || pathname.match(/^\/api\/sessions\/(\d+)$/);
-  const messageMatch = pathname.match(/^\/api\/sessions\/(\d+)\/messages\/(\d+)$/);
+  let pathname;
   try {
+    pathname = new URL(req.url, `http://${req.headers.host}`).pathname;
+  } catch {
+    // Both the request target and Host header are untrusted URL input.
+    return sendJson(res, 400, { error: "Invalid request URL" });
+  }
+  try {
+    const sessionMatch = pathname.match(/^\/api\/sessions\/(\d+)\/messages$/) || pathname.match(/^\/api\/sessions\/(\d+)$/);
+    const messageMatch = pathname.match(/^\/api\/sessions\/(\d+)\/messages\/(\d+)$/);
     if (req.method === "POST" && pathname === "/api/classify") return await handleClassify(req, res);
     if (req.method === "POST" && pathname === "/api/create-workout") return await handleCreateWorkout(req, res);
     if (req.method === "POST" && pathname === "/api/modify-workout") return await handleModifyWorkout(req, res);

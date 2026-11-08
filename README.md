@@ -36,9 +36,11 @@ JSON. Add new public assets there explicitly; keep credentials, Git metadata,
 and raw session files outside that list. API authentication is still required
 before using this app with private data on the public internet.
 
-Run the static-file security regression tests with
-`node --test tests/static-files.test.js`. They use a disposable server and dummy
-secrets, without reading your `.env` or calling an AI provider.
+Run the security regression tests with `node --test tests/*.test.js`. They
+cover static-file restrictions and malformed request URLs/Host headers, including
+checking that the server keeps responding after rejecting invalid URL input.
+They use disposable servers and dummy secrets, without reading your `.env` or
+calling an AI provider.
 
 Messages sent in the Coach view are classified by Jev (jev-1.13) into one
 of: Create Workout, Modify Workout, Give Workout Advice, or Analyze Form, and
