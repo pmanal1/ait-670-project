@@ -35,6 +35,19 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
+Before restarting, install the current Codex CLI on the homelab and run
+`codex login` as the same user that runs `ait670.service`. Choose ChatGPT sign-in
+with your subscription; for a headless host use `codex login --device-auth`.
+Verify `codex login status` as that user. Authentication on your development
+computer does not authenticate the homelab. Keep the credential directory outside
+the checkout, owned by the service user, and never copy it into Git.
+
+Set `CODEX_BIN` in the app's `.env` to the absolute CLI path if the systemd service
+does not have it on `PATH`. Optionally set `CODEX_HOME` to a private authentication
+directory. Keep `TYPESAFE_API_KEY` for Jev classification; generation no longer
+uses `OPENCODE_GO_API_KEY`. Generation consumes the signed-in user's Codex allowance
+and returns an error if that login, model access or allowance is unavailable.
+
 Deploy this revision of `server.js` and restart the existing app service:
 
 ```sh
@@ -62,6 +75,8 @@ it through another proxy, tunnel, container mapping, or port forward.
   endpoint. The app uses the same parsed path for limiting and dispatch, so
   backslash variants, dot segments, query strings, and changes of client IP
   cannot bypass the budget. This is a request limit, not a spending cap.
+- Codex generation is additionally capped at two simultaneous CLI processes and
+  90 seconds per request, below Nginx's 120-second proxy timeout.
 - Browser writes from a different origin are rejected with `403`, because
   browsers may automatically reuse cached Basic credentials. Origin-less
   API clients still need the password.
