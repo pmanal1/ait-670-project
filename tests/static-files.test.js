@@ -27,8 +27,8 @@ test("static serving exposes only the UI's public files", async (t) => {
     "data/workout.json": '{"exercises":[]}',
   };
   const privateFiles = {
-    ".env": "OPENCODE_API_KEY=PRIVATE_TEST_SENTINEL",
-    ".env.example": "OPENCODE_API_KEY=",
+    ".env": "TYPESAFE_API_KEY=PRIVATE_TEST_SENTINEL",
+    ".env.example": "TYPESAFE_API_KEY=",
     ".git/config": "PRIVATE_TEST_SENTINEL",
     ".git/HEAD": "ref: refs/heads/main",
     ".git/objects/test": "PRIVATE_TEST_SENTINEL",

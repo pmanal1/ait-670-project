@@ -85,7 +85,7 @@ async function fixture(t, { realApp = false } = {}) {
   if (realApp) {
     await fs.copyFile(path.join(__dirname, "..", "server.js"), path.join(directory, "server.js"));
     await fs.mkdir(path.join(directory, "data"));
-    await fs.writeFile(path.join(directory, ".env"), "OPENCODE_API_KEY=DUMMY\nOPENCODE_GO_API_KEY=DUMMY\n");
+    await fs.writeFile(path.join(directory, ".env"), "TYPESAFE_API_KEY=DUMMY\nOPENCODE_GO_API_KEY=DUMMY\n");
     await fs.writeFile(path.join(directory, "data", "user.json"), "{}");
     await fs.writeFile(path.join(directory, "data", "workout.json"), '{"exercises":[]}');
     await fs.writeFile(path.join(directory, "data", "exercises.json"), '[{"id":"squat","name":"Squat"}]');

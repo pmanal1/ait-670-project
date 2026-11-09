@@ -13,7 +13,7 @@ try {
   console.error("Warning: could not read .env");
 }
 
-const OPENCODE_API_KEY = env.OPENCODE_API_KEY;
+const TYPESAFE_API_KEY = process.env.TYPESAFE_API_KEY ?? env.TYPESAFE_API_KEY;
 const PORT = process.env.PORT || 5173;
 
 // Chat sessions: one JSON file per session in /sessions, filename = id.
@@ -71,17 +71,14 @@ function listSessions() {
     }));
 }
 
-const CLASSIFY_URL = "https://opencode.ai/zen/v1/systemone";
-const CLASSIFY_MODEL = "jev-1.13";
-const CLASSIFY_MODEL_FALLBACK = "jev-1.13-free";
+const CLASSIFY_URL = "https://api.typesafe.ai/v1/systemone";
+const CLASSIFY_MODEL = process.env.TYPESAFE_MODEL || env.TYPESAFE_MODEL || "jev-1.13.0";
+const CLASSIFY_TIMEOUT_MS = 15000;
 
 // Workout generation via OpenCode Go (https://opencode.ai/v2/docs/console/go/)
 const GO_URL = "https://opencode.ai/inference/go/openai/v1/chat/completions";
 const GO_MODEL = "glm-5.3-flash";
 
-// Preferred: a single "choice" question on the paid model. If that fails
-// (e.g. out of funds), classification falls back to the free model with one
-// yes/no question per type; the highest-probability type wins.
 const CLASSIFICATION_TYPES = {
   create_workout: "Create Workout",
   modify_workout: "Modify Workout",
@@ -130,126 +127,94 @@ function sendJson(res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
-// Preferred: one "choice" question on the paid model. The gateway currently
-// answers 422 for choice/score questions ("Endpoint is unavailable"), so we
-// fall back to the free model with one yes/no question per type and take the
-// highest-probability type.
-// Preliminary gate: ask Jev (as a yes/no probability) whether the message is
-// relevant to any of the supported message types before classifying it.
+// Ask the relevance Noul and category Choice together. The relevance gate
+// still decides whether to use the category, even though both are returned.
 const RELEVANCE_THRESHOLD = 0.5;
 
 async function handleClassify(req, res) {
   const { text } = await readBody(req);
-  if (!text || !text.trim()) {
+  if (typeof text !== "string" || !text.trim()) {
     return sendJson(res, 400, { error: "text is required" });
   }
+  if (!TYPESAFE_API_KEY?.trim()) {
+    return sendJson(res, 503, { error: "Classification is not configured: set TYPESAFE_API_KEY." });
+  }
 
-  const relevanceQuestions = {
+  const result = await callSystemOne(text, {
     relevant: {
       type: "noul",
       instructions: `The message is a request the coach can act on, i.e. it matches at least one of these message types: ${Object.values(
         QUESTION_INSTRUCTIONS,
       ).join("; ")}`,
     },
-  };
-
-  let relevance = null;
-  let lastError = "Relevance check failed";
-  for (const model of [CLASSIFY_MODEL, CLASSIFY_MODEL_FALLBACK]) {
-    const attemptResult = await callSystemOne(model, text, relevanceQuestions);
-    if (attemptResult.ok) {
-      relevance = attemptResult;
-      break;
-    }
-    lastError = attemptResult.error || lastError;
-  }
-  if (!relevance) {
-    return sendJson(res, 502, { error: lastError });
-  }
-  if (relevance.probability < RELEVANCE_THRESHOLD) {
-    return sendJson(res, 200, { relevant: false });
-  }
-
-  const choiceQuestions = {
     message_type: {
       type: "choice",
       instructions: "Classify the sender message into exactly one type.",
       criteria: QUESTION_INSTRUCTIONS,
     },
-  };
-  const noulQuestions = Object.fromEntries(
-    Object.keys(CLASSIFICATION_TYPES).map((key) => [
-      key,
-      { type: "noul", instructions: QUESTION_INSTRUCTIONS[key] },
-    ]),
-  );
-
-  const attempts = [
-    { model: CLASSIFY_MODEL, questions: choiceQuestions },
-    { model: CLASSIFY_MODEL_FALLBACK, questions: noulQuestions },
-  ];
-
-  let result = null;
-  lastError = "Classification failed";
-  for (const attempt of attempts) {
-    const attemptResult = await callSystemOne(attempt.model, text, attempt.questions);
-    if (attemptResult.ok) {
-      result = attemptResult;
-      break;
-    }
-    lastError = attemptResult.error || lastError;
+  });
+  if (!result.ok) {
+    return sendJson(res, 502, { error: result.error });
   }
-  if (!result) {
-    return sendJson(res, 502, { error: lastError });
+
+  const relevance = result.answers?.relevant;
+  if (relevance?.type !== "noul" || !isProbability(relevance.noul)) {
+    return sendJson(res, 502, { error: "TypeSafe returned an invalid relevance answer." });
+  }
+  if (relevance.noul < RELEVANCE_THRESHOLD) {
+    return sendJson(res, 200, { relevant: false });
+  }
+
+  const answer = result.answers?.message_type;
+  if (answer?.type !== "choice" || typeof answer.choice !== "string" ||
+      !Object.hasOwn(CLASSIFICATION_TYPES, answer.choice) ||
+      !isProbability(answer.confidence) ||
+      !Object.keys(CLASSIFICATION_TYPES).every((key) => isProbability(answer.probabilities?.[key]))) {
+    return sendJson(res, 502, { error: "TypeSafe returned an invalid classification answer." });
   }
   sendJson(res, 200, {
-    ...result,
-    label: result.type ? CLASSIFICATION_TYPES[result.type] : "Unclassified",
+    ok: true,
+    type: answer.choice,
+    label: CLASSIFICATION_TYPES[answer.choice],
+    probability: answer.probabilities[answer.choice],
+    confidence: answer.confidence,
+    probabilities: answer.probabilities,
   });
 }
 
-async function callSystemOne(model, state, questions, answerKeys) {
-  const keys = answerKeys || Object.keys(questions);
+function isProbability(value) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
+}
+
+async function callSystemOne(state, questions) {
   try {
     const upstream = await fetch(CLASSIFY_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENCODE_API_KEY}`,
+        Authorization: `Bearer ${TYPESAFE_API_KEY}`,
       },
-      body: JSON.stringify({ model, state, questions }),
+      body: JSON.stringify({ model: CLASSIFY_MODEL, state, questions }),
+      signal: AbortSignal.timeout(CLASSIFY_TIMEOUT_MS),
     });
-    const data = await upstream.json().catch(() => ({}));
     if (!upstream.ok) {
-      return { ok: false, error: data.error?.message || `Request failed (${upstream.status})` };
-    }
-    const choiceAnswer = data.answers?.message_type;
-    if (choiceAnswer?.type === "choice" && CLASSIFICATION_TYPES[choiceAnswer.choice]) {
-      return {
-        ok: true,
-        type: choiceAnswer.choice,
-        probability: choiceAnswer.confidence ?? 1,
-        probabilities: choiceAnswer.probabilities || undefined,
+      await upstream.body?.cancel();
+      const errors = {
+        401: "TypeSafe rejected the API key. Check TYPESAFE_API_KEY.",
+        402: "TypeSafe credits are exhausted. Add credits in the TypeSafe console.",
+        429: "TypeSafe rate limit reached. Try again shortly.",
+        529: "TypeSafe is temporarily overloaded. Try again shortly.",
       };
+      return { ok: false, error: errors[upstream.status] || `TypeSafe request failed (${upstream.status}).` };
     }
-    const answers = data.answers || {};
-    let bestKey = null;
-    let bestScore = -1;
-    const probabilities = {};
-    for (const key of keys) {
-      const score = answers[key]?.noul ?? 0;
-      probabilities[key] = score;
-      if (score > bestScore) {
-        bestScore = score;
-        bestKey = key;
-      }
-    }
-    if (!bestKey) {
-      return { ok: false, error: "No answers returned" };
-    }
-    return { ok: true, type: bestKey, probability: bestScore, probabilities };
+    const data = await upstream.json();
+    return { ok: true, answers: data?.answers };
   } catch (err) {
-    return { ok: false, error: err.message };
+    if (err.name === "TimeoutError" || err.name === "AbortError") {
+      return { ok: false, error: "TypeSafe classification timed out. Try again shortly." };
+    }
+    // Keep upstream bodies and connection details out of the browser response.
+    return { ok: false, error: "TypeSafe classification failed. Try again shortly." };
   }
 }
 

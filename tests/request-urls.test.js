@@ -21,7 +21,7 @@ test("request URL parsing cannot crash the server", { timeout: 15000 }, async (t
 
   const page = "<!doctype html><title>URL handling fixture</title>";
   await fs.writeFile(path.join(directory, "index.html"), page);
-  await fs.writeFile(path.join(directory, ".env"), "OPENCODE_API_KEY=TEST_ONLY\n");
+  await fs.writeFile(path.join(directory, ".env"), "TYPESAFE_API_KEY=TEST_ONLY\n");
   await fs.copyFile(path.join(__dirname, "..", "server.js"), path.join(directory, "server.js"));
   // Exercise the real HTTP listener in isolation, without using the app's data or keys.
   await fs.writeFile(path.join(directory, "bootstrap.js"), `
