@@ -21,17 +21,34 @@ ait-670-project/
 ├── index.html      
 ├── styles.css      
 ├── script.js       
-├── server.js       # Local Node proxy: serves the app + TypeSafe/OpenCode AI endpoints
+├── server.js       # Node server: Jev classification + Codex Terra generation
 └── README.md
 ```
 
 ## Usage
 
 1. Copy `.env.example` to `.env` and fill in `TYPESAFE_API_KEY` for Jev
-   classification and `OPENCODE_GO_API_KEY` for workouts and advice.
-   `TYPESAFE_API_KEY` and `TYPESAFE_MODEL` can also be supplied as process
-   environment variables; those take precedence over `.env`.
-2. Run `node server.js` and open http://localhost:5173.
+   classification. `TYPESAFE_API_KEY` and `TYPESAFE_MODEL` can also be supplied
+   as process environment variables; those take precedence over `.env`.
+2. Install the current [Codex CLI](https://learn.chatgpt.com/docs/non-interactive-mode)
+   (tested with 0.167.0), run `codex login`, and choose ChatGPT sign-in using your
+   subscription. Check with `codex login status`. Terra requires CLI 0.159.0 or later;
+   use a current release for the isolation flags used by this app.
+3. Run `node server.js` and open http://localhost:5173.
+
+Generation uses `codex exec -m gpt-6.1-terra` with your saved ChatGPT login and
+consumes your Codex subscription allowance. It enforces ChatGPT authentication
+and does not fall back to API-key billing. `OPENCODE_GO_API_KEY` is no longer used.
+Set `CODEX_BIN` in `.env` if the CLI is not on the server's `PATH`, and optionally
+`CODEX_HOME` to select its authentication directory. Do not commit Codex credentials.
+
+Codex runs in a private temporary directory with user configuration, plugins,
+shell commands, browser/computer tools, app integrations, hooks and subagents
+disabled. It receives the profile, catalog and conversation through stdin, returns
+JSON using an output schema, and does not persist a Codex session. Temporary files
+are removed after each call. The app still saves its own chats in `sessions/`.
+Calls time out after 90 seconds, with at most two generations running at once;
+login, quota and CLI failures return a retryable error without CLI diagnostics.
 
 Static serving is restricted to an explicit `PUBLIC_FILES` allowlist in
 `server.js`: the page, stylesheet, browser script, profile JSON, and workout
@@ -43,13 +60,12 @@ the authenticated HTTPS proxy in [deploy/nginx/spotme.conf](deploy/nginx/spotme.
 See [deployment instructions](deploy/README.md) for the private login, rate
 limits, and password changes. Local access on the server itself is trusted.
 
-Run the classification and security regression tests with
-`node --test tests/*.test.js`. They cover the TypeSafe request/response contract
-and failure handling, static-file restrictions, and malformed request URLs/Host
-headers, including checking that the server keeps responding after rejecting
-invalid URL input.
-They use disposable servers and dummy secrets, without reading your `.env` or
-calling an AI provider.
+Run the regression tests with `node --test tests/*.test.js`. They cover
+TypeSafe classification, Codex generation, conversation history, output validation,
+CLI failures, static-file restrictions and malformed request URLs/Host headers,
+including checking that the server keeps responding after rejecting invalid input.
+They use disposable servers, a fake CLI and dummy secrets, without
+reading your `.env` or calling an AI provider.
 
 With Nginx and OpenSSL installed, run all checks, including the isolated
 HTTPS/authentication integration tests:
@@ -74,9 +90,9 @@ and the label is shown in the chat. One server-side request to
 The default model is pinned to `jev-1.13.0`, matching the previous Jev release.
 Set `TYPESAFE_MODEL` to another supported model ID or `jev-latest` to follow
 TypeSafe's stable releases. The old classification `OPENCODE_API_KEY` and
-`jev-1.13-free` fallback are no longer used. Keep `OPENCODE_GO_API_KEY` for the
-separate generation/advice calls. See the official [TypeSafe API reference](https://docs.typesafe.ai/api/system-one)
-and [model list](https://docs.typesafe.ai/models).
+`jev-1.13-free` fallback are no longer used. See the official
+[TypeSafe API reference](https://docs.typesafe.ai/api/system-one) and
+[model list](https://docs.typesafe.ai/models).
 
 The TypeSafe account needs API access and prepaid credits. Missing configuration
 returns `503`; rejected keys, exhausted credits, rate limits, timeouts (15 seconds),
@@ -85,7 +101,8 @@ or automatic paid retries. After setting the key on a deployment, restart the
 Node service. Keys stay server-side in `.env` or the service environment and
 must never be committed.
 
-"Create Workout" prompts generate `data/workout.json` via GLM-5.3-Flash
-(OpenCode Go). "Give Workout Advice" prompts get concise advice from
-GLM-5.3-Flash using the whole session context; once a session is classified as
-advice, every later prompt in that session stays in advice mode.
+"Create Workout" prompts generate `data/workout.json` via Codex Terra.
+"Modify Workout" prompts propose a plan in `data/workout.pending.json` for
+confirmation. "Give Workout Advice" prompts get concise advice from Terra using
+the whole session context; once a session is classified as advice, every later
+prompt in that session stays in advice mode.

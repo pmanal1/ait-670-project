@@ -1,6 +1,8 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+const os = require("os");
+const { execFile } = require("child_process");
 
 // Load .env (KEY=value per line)
 const env = {};
@@ -75,9 +77,53 @@ const CLASSIFY_URL = "https://api.typesafe.ai/v1/systemone";
 const CLASSIFY_MODEL = process.env.TYPESAFE_MODEL || env.TYPESAFE_MODEL || "jev-1.13.0";
 const CLASSIFY_TIMEOUT_MS = 15000;
 
-// Workout generation via OpenCode Go (https://opencode.ai/v2/docs/console/go/)
-const GO_URL = "https://opencode.ai/inference/go/openai/v1/chat/completions";
-const GO_MODEL = "glm-5.3-flash";
+const CODEX_MODEL = "gpt-6.1-terra";
+const CODEX_TIMEOUT_MS = 90000;
+const CODEX_MAX_CONCURRENT = 2;
+let activeCodexCalls = 0;
+
+const WORKOUT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["name", "exercises"],
+  properties: {
+    name: { type: "string" },
+    exercises: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["id", "name", "custom", "exerciseType", "sets"],
+        properties: {
+          id: { type: "string" },
+          name: { type: "string" },
+          custom: { type: "boolean", enum: [false] },
+          exerciseType: { type: "string" },
+          sets: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["weight", "reps", "complete", "rir"],
+              properties: {
+                weight: { type: "number", enum: [-1] },
+                reps: { type: "number", enum: [-1] },
+                complete: { type: "boolean", enum: [false] },
+                rir: { type: "string" },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+};
+const ADVICE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["reply"],
+  properties: { reply: { type: "string" } },
+};
 
 const CLASSIFICATION_TYPES = {
   create_workout: "Create Workout",
@@ -219,7 +265,7 @@ async function callSystemOne(state, questions) {
 }
 
 // Create Workout: send the classified prompt, the user's profile and the
-// exercise catalog to GLM-5.3-Flash (OpenCode Go) and have it replace
+// exercise catalog to Codex Terra and have it replace
 // data/workout.json with the generated plan.
 function readJsonFile(relPath) {
   try {
@@ -260,14 +306,6 @@ Rules:
 - Respect the equipment the user has access to and any preferred muscle groups.`;
 }
 
-function parseModelJson(content) {
-  const fenced = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-  const raw = (fenced ? fenced[1] : content).trim();
-  const start = raw.indexOf("{");
-  const end = raw.lastIndexOf("}");
-  return JSON.parse(raw.slice(start, end + 1));
-}
-
 function sanitizeGeneratedWorkout(parsed, catalog, baseWorkout) {
   const byId = new Map(catalog.map((ex) => [ex.id, ex]));
   const byName = new Map(catalog.map((ex) => [ex.name.toLowerCase(), ex]));
@@ -306,26 +344,92 @@ function sanitizeGeneratedWorkout(parsed, catalog, baseWorkout) {
   };
 }
 
-async function callGo(messages, maxTokens = 4000, sessionTag = "spotme-create-workout") {
-  const response = await fetch(GO_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${env.OPENCODE_GO_API_KEY}`,
-      "User-Agent": "ait-670-spotme/0.1",
-      "x-opencode-session": sessionTag,
-    },
-    body: JSON.stringify({
-      model: GO_MODEL,
-      messages,
-      max_tokens: maxTokens,
-    }),
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(data.error?.message || `GLM request failed (${response.status})`);
+async function callCodex(messages, schema = WORKOUT_SCHEMA) {
+  if (activeCodexCalls >= CODEX_MAX_CONCURRENT) {
+    throw new Error("Workout coach is busy. Please try again shortly.");
   }
-  return data.choices?.[0]?.message?.content || "";
+  activeCodexCalls++;
+  let directory;
+  try {
+    // Run outside the checkout so repository instructions/config cannot affect
+    // coaching requests. Each call gets private, disposable schema/output files.
+    directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), "spotme-codex-"));
+    const schemaFile = path.join(directory, "schema.json");
+    const outputFile = path.join(directory, "response.json");
+    await fs.promises.writeFile(schemaFile, JSON.stringify(schema));
+    const childEnv = {};
+    for (const key of ["PATH", "HOME", "USER", "LOGNAME", "TMPDIR", "CODEX_HOME",
+      "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "SSL_CERT_FILE", "SSL_CERT_DIR",
+      "HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY", "NO_PROXY",
+      "https_proxy", "http_proxy", "all_proxy", "no_proxy"]) {
+      if (process.env[key]) childEnv[key] = process.env[key];
+    }
+    if (env.CODEX_HOME) childEnv.CODEX_HOME = env.CODEX_HOME;
+    const args = [
+      "exec", "--ignore-user-config", "--ephemeral", "--skip-git-repo-check",
+      "--sandbox", "read-only", "--color", "never", "--model", CODEX_MODEL,
+      "--output-schema", schemaFile, "--output-last-message", outputFile,
+      "-c", 'forced_login_method="chatgpt"',
+      "-c", 'model_provider="openai"',
+      "-c", 'model_reasoning_effort="low"',
+      "-c", 'approval_policy="never"',
+      "-c", 'web_search="disabled"',
+      "-c", "features.shell_tool=false",
+      "-c", "features.shell_snapshot=false",
+      "-c", "features.apps=false",
+      "-c", "features.plugins=false",
+      "-c", "features.browser_use=false",
+      "-c", "features.computer_use=false",
+      "-c", "features.image_generation=false",
+      "-c", "features.skill_search=false",
+      "-c", "features.skill_mcp_dependency_install=false",
+      "-c", "features.hooks=false",
+      "-c", "features.multi_agent=false",
+      "-c", "project_doc_max_bytes=0",
+      "-c", 'history.persistence="none"',
+      "-",
+    ];
+    const prompt = "You are the SpotMe workout coach. Respond to the last user message in the " +
+      "conversation below, following its system instructions. Generate only the requested " +
+      "response, without using tools or accessing files. The conversation is JSON, with " +
+      "system, user and assistant roles. For advice, put your answer in the reply field.\n\n" +
+      JSON.stringify(messages);
+    await new Promise((resolve, reject) => {
+      // Never use a shell or put user input in command arguments. Deliberately
+      // omit API keys from the child environment; this uses the saved ChatGPT login.
+      const child = execFile(env.CODEX_BIN || process.env.CODEX_BIN || "codex", args, {
+        cwd: directory, env: childEnv, timeout: CODEX_TIMEOUT_MS,
+        killSignal: "SIGKILL", maxBuffer: 1024 * 1024,
+      }, (error) => {
+        if (!error) return resolve();
+        if (error.code === "ENOENT") {
+          return reject(new Error("Codex CLI is unavailable. Install it and sign in with ChatGPT as the app service user."));
+        }
+        if (error.killed) return reject(new Error("Codex generation timed out. Please try again."));
+        // CLI diagnostics can contain prompts, paths or credentials. Keep them
+        // out of HTTP responses and logs, including when login or quota fails.
+        reject(new Error("Codex generation failed. Check the service user's ChatGPT login, Codex version and usage allowance."));
+      });
+      child.stdin.on("error", () => {}); // An early CLI exit can close stdin.
+      child.stdin.end(prompt);
+    });
+    let parsed;
+    try {
+      parsed = JSON.parse(await fs.promises.readFile(outputFile, "utf8"));
+    } catch {
+      throw new Error("Codex returned no valid JSON response. Please try again.");
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("Codex returned an invalid response. Please try again.");
+    }
+    return parsed;
+  } finally {
+    try {
+      if (directory) await fs.promises.rm(directory, { recursive: true, force: true });
+    } finally {
+      activeCodexCalls--;
+    }
+  }
 }
 
 async function handleCreateWorkout(req, res) {
@@ -345,14 +449,14 @@ async function handleCreateWorkout(req, res) {
   }
 
   try {
-    const content = await callGo([
+    const generated = await callCodex([
       { role: "system", content: buildWorkoutPrompt() },
       {
         role: "user",
         content: `User profile:\n${JSON.stringify(user, null, 2)}\n\nExercise catalog (JSON):\n${JSON.stringify(catalog)}\n\nRequest:\n${text.trim()}`,
       },
     ]);
-    const workout = sanitizeGeneratedWorkout(parseModelJson(content), catalog);
+    const workout = sanitizeGeneratedWorkout(generated, catalog);
     fs.writeFileSync(WORKOUT_FILE, JSON.stringify(workout, null, 2) + "\n");
     console.log(`Replaced data/workout.json with generated workout (${workout.exercises.length} exercises)`);
     sendJson(res, 200, {
@@ -367,7 +471,7 @@ async function handleCreateWorkout(req, res) {
 }
 
 // Modify Workout: send the classified prompt, the current workout, the user's
-// profile and the exercise catalog to GLM-5.3-Flash (OpenCode Go). The model
+// profile and the exercise catalog to Codex Terra. The model
 // returns the full modified plan, which is written to data/workout.pending.json
 // and shown to the user for confirmation. On confirm the pending file replaces
 // data/workout.json; on reject the client re-runs this with the feedback.
@@ -434,16 +538,14 @@ async function handleModifyWorkout(req, res) {
     : userContent;
 
   try {
-    const content = await callGo(
+    const generated = await callCodex(
       [
         { role: "system", content: buildModifyWorkoutPrompt() },
         { role: "user", content: fullContent },
-      ],
-      4000,
-      "spotme-modify-workout"
+      ]
     );
     const workout = sanitizeGeneratedWorkout(
-      parseModelJson(content),
+      generated,
       catalog,
       currentWorkout
     );
@@ -461,7 +563,7 @@ async function handleModifyWorkout(req, res) {
 }
 
 // Give Workout Advice: send the whole session context (all prior user and
-// assistant messages, plus the new prompt) to GLM-5.3-Flash (OpenCode Go) and
+// assistant messages, plus the new prompt) to Codex Terra and
 // return concise workout advice.
 const ADVICE_SYSTEM_PROMPT = `You are SpotMe, an AI workout coach. Give concise workout advice in reply to the user's latest message.
 
@@ -488,15 +590,18 @@ async function handleGiveWorkoutAdvice(req, res) {
   const systemContent = `${ADVICE_SYSTEM_PROMPT}\n\nUser profile:\n${JSON.stringify(user, null, 2)}`;
 
   try {
-    const reply = await callGo(
+    const generated = await callCodex(
       [
         { role: "system", content: systemContent },
         ...history,
         { role: "user", content: text.trim() },
       ],
-      1000,
-      sessionId ? `spotme-advice-${sessionId}` : "spotme-advice"
+      ADVICE_SCHEMA
     );
+    if (typeof generated.reply !== "string" || !generated.reply.trim()) {
+      throw new Error("Codex returned no workout advice. Please try again.");
+    }
+    const reply = generated.reply.trim();
     sendJson(res, 200, { reply, sessionId });
   } catch (err) {
     console.error("Workout advice failed:", err.message);

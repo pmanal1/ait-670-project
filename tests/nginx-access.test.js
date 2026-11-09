@@ -85,7 +85,7 @@ async function fixture(t, { realApp = false } = {}) {
   if (realApp) {
     await fs.copyFile(path.join(__dirname, "..", "server.js"), path.join(directory, "server.js"));
     await fs.mkdir(path.join(directory, "data"));
-    await fs.writeFile(path.join(directory, ".env"), "TYPESAFE_API_KEY=DUMMY\nOPENCODE_GO_API_KEY=DUMMY\n");
+    await fs.writeFile(path.join(directory, ".env"), "TYPESAFE_API_KEY=DUMMY\n");
     await fs.writeFile(path.join(directory, "data", "user.json"), "{}");
     await fs.writeFile(path.join(directory, "data", "workout.json"), '{"exercises":[]}');
     await fs.writeFile(path.join(directory, "data", "exercises.json"), '[{"id":"squat","name":"Squat"}]');
@@ -98,6 +98,13 @@ async function fixture(t, { realApp = false } = {}) {
       global.fetch = async () => {
         fs.appendFileSync(path.join(__dirname, "provider-calls"), "call\\n");
         return new Response('{"error":{"message":"mock provider unavailable"}}', { status: 503 });
+      };
+      // Generation now uses Codex CLI. Mock it as well so these security
+      // tests can never launch a real CLI or spend subscription allowance.
+      require("node:child_process").execFile = (_file, _args, _options, callback) => {
+        fs.appendFileSync(path.join(__dirname, "provider-calls"), "call\\n");
+        process.nextTick(() => callback(new Error("mock provider unavailable")));
+        return { stdin: { on() {}, end() {} } };
       };
       const listen = http.Server.prototype.listen;
       http.Server.prototype.listen = function (...args) {
@@ -154,6 +161,9 @@ async function fixture(t, { realApp = false } = {}) {
       access_log off;
       client_body_temp_path ${directory}/body;
       proxy_temp_path ${directory}/proxy;
+      fastcgi_temp_path ${directory}/fastcgi;
+      uwsgi_temp_path ${directory}/uwsgi;
+      scgi_temp_path ${directory}/scgi;
       ${site}
     }
   `);

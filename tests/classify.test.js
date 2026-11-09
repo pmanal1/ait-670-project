@@ -28,9 +28,10 @@ function answer(choice = "create_workout", relevance = 0.99) {
 }
 
 // Run the real HTTP handler in a disposable checkout. Every external fetch is
-// intercepted in the child, so these tests cannot read real keys or spend credits.
+// intercepted and Codex execution is blocked in the child, so these tests
+// cannot read real keys or spend credits/subscription allowance.
 async function fixture(t, replies, {
-  dotenv = "TYPESAFE_API_KEY=typesafe-test-key\nOPENCODE_API_KEY=obsolete-key\nOPENCODE_GO_API_KEY=go-test-key\n",
+  dotenv = "TYPESAFE_API_KEY=typesafe-test-key\nOPENCODE_API_KEY=obsolete-key\n",
   environment = {},
 } = {}) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "spotme-classify-test-"));
@@ -51,6 +52,9 @@ async function fixture(t, replies, {
     const fs = require("node:fs");
     const path = require("node:path");
     const http = require("node:http");
+    require("node:child_process").execFile = () => {
+      throw new Error("Classification tests must never invoke Codex");
+    };
     const replies = require("./replies.json");
     const calls = [];
     global.fetch = async (url, options) => {
@@ -223,14 +227,4 @@ test("malformed provider answers cannot become valid classifications", async (t)
       assert.equal((await app.calls()).length, 1);
     });
   }
-});
-
-test("workout advice still uses the separate OpenCode Go provider and key", async (t) => {
-  const app = await fixture(t, [{ body: { choices: [{ message: { content: "Rest between sets." } }] } }]);
-  const response = await app.post({ text: "How long should I rest?" }, "/api/give-workout-advice");
-  assert.equal(response.status, 200);
-  const [call] = await app.calls();
-  assert.equal(call.url, "https://opencode.ai/inference/go/openai/v1/chat/completions");
-  assert.equal(call.headers.Authorization, "Bearer go-test-key");
-  assert.equal(call.body.model, "glm-5.3-flash");
 });
